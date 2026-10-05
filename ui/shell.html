@@ -1,0 +1,40 @@
+<body>
+<div class="auth hidden" id="authView">
+  <form id="authForm" autocomplete="on">
+    <h1 id="authTitle">Sign in</h1>
+    <p id="authSub"></p>
+    <div id="setupName" class="hidden"><label class="f" for="aName">Your name</label><input class="inp" id="aName"></div>
+    <label class="f" for="aUser">User ID</label><input class="inp" id="aUser" autocomplete="username" required>
+    <label class="f" for="aPass">Password</label><input class="inp" id="aPass" type="password" autocomplete="current-password" required>
+    <button class="btn primary" id="authBtn">Sign in</button>
+    <div class="err-text" id="authErr" role="alert"></div>
+  </form>
+</div>
+
+<div class="shell hidden" id="appView">
+  <aside class="side" id="side">
+    <div class="brand" id="brand">Balance Reconciliation<small>Payout reconciliation</small></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="me">
+      <b id="meName"></b><span id="meRole" class="small"></span>
+      <div class="row-gap"><button id="pwBtn">Change password</button><button id="logoutBtn">Log out</button></div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <button class="btn menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+      <h1 id="pageTitle">Dashboard</h1>
+      <span class="date" id="topDate"></span>
+      <span class="chip" id="dayChip"></span>
+      <div class="diff"><small id="topDiffLabel">Difference</small><b id="topDiff">0</b></div>
+      <button class="btn primary" id="syncBtn" title="Pull latest balances from all API connections">Refresh API</button>
+    </header>
+    <main class="content" id="content"></main>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-head"><h3 id="dlgTitle"></h3><span style="margin-left:auto"></span><button class="ico" onclick="dlg.close()" aria-label="Close">✕</button></div>
+  <div class="dlg-body" id="dlgBody"></div>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
