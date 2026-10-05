@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Balance Reconciliation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F6F8F7; --sheet:#FFFFFF; --ink:#1B2A30; --muted:#5D6E73; --rule:#DCE3E1;
+  --owed:#0E6E66; --owed-bg:#E4F2EF; --held:#5B3F86; --held-bg:#EEE9F6;
+  --flag:#B42318; --flag-bg:#FDECEA; --api:#155EAA; --api-bg:#E5EFFA; --warn:#9A5B00;
+  --font:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#111A1D; --sheet:#182428; --ink:#E6EEEC; --muted:#93A5A9; --rule:#2B3A3F;
+  --owed:#5FC7B9; --owed-bg:#173733; --held:#B9A2E6; --held-bg:#2A2340;
+  --flag:#FF8A80; --flag-bg:#3B1E1C; --api:#7FB6F2; --api-bg:#18304A; --warn:#F2B866;
+}}
+:root[data-theme="dark"]{
+  --paper:#111A1D; --sheet:#182428; --ink:#E6EEEC; --muted:#93A5A9; --rule:#2B3A3F;
+  --owed:#5FC7B9; --owed-bg:#173733; --held:#B9A2E6; --held-bg:#2A2340;
+  --flag:#FF8A80; --flag-bg:#3B1E1C; --api:#7FB6F2; --api-bg:#18304A; --warn:#F2B866;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.45 var(--font);font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--api);outline-offset:2px}
+
+/* Equation bar — the one bold element */
+.eq{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--ink);color:var(--paper);padding:14px 20px 16px}
+.eq-inner{max-width:1400px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 14px}
+.term{display:flex;flex-direction:column}
+.term small{font-size:12px;opacity:.7}
+.term b{font-size:clamp(16px,1.8vw,22px);font-weight:600}
+.op{font-size:22px;opacity:.55;padding-bottom:1px}
+.result{margin-left:auto;text-align:right;border-left:1px solid rgba(255,255,255,.2);padding-left:18px}
+.result b{font-size:clamp(26px,3.2vw,40px);font-weight:800;letter-spacing:-.01em}
+.result small{font-size:12.5px;opacity:.8}
+
+.toolbar{max-width:1400px;margin:0 auto;padding:16px 20px 4px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.toolbar h1{font-size:20px;margin:0 auto 0 0;font-weight:700}
+.btn{border:1px solid var(--rule);background:var(--sheet);padding:7px 13px;border-radius:6px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--api);border-color:var(--api);color:#fff}
+.status{font-size:13px;color:var(--muted);width:100%}
+.status.err{color:var(--flag)}
+select.btn{padding:6px 8px}
+
+.grid{max-width:1400px;margin:0 auto;padding:10px 20px 40px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+@media (max-width:1000px){.grid{grid-template-columns:1fr}}
+.side{min-width:0}
+.side h2{font-size:15px;margin:6px 0 10px;font-weight:700;display:flex;gap:8px;align-items:center}
+.side h2 i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.side.owed h2 i{background:var(--owed)} .side.held h2 i{background:var(--held)}
+
+section{background:var(--sheet);border:1px solid var(--rule);border-radius:8px;margin-bottom:18px;overflow:hidden}
+.sec-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.owed .sec-head{background:var(--owed-bg)} .held .sec-head{background:var(--held-bg)}
+.sec-head h3{margin:0;font-size:15px;font-weight:700}
+.sec-head .sub{font-size:12.5px;color:var(--muted)}
+.sec-head .tot{margin-left:auto;font-weight:700;font-size:16px}
+.owed .tot{color:var(--owed)} .held .tot{color:var(--held)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:720px}
+td{border-bottom:1px solid var(--rule);padding:3px 6px;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.nm{min-width:180px}
+td.nt{width:130px;min-width:110px}
+td.n{width:34px;color:var(--muted);font-size:12.5px;text-align:right;padding-right:8px}
+td.amt{width:140px;min-width:130px;text-align:right}
+.amt .cell{min-width:120px}
+td.src{width:120px}
+td.act{width:64px;text-align:right;white-space:nowrap}
+.cell{width:100%;border:1px solid transparent;background:transparent;padding:5px 6px;border-radius:4px}
+.cell:hover{border-color:var(--rule)} .cell:focus{border-color:var(--api);background:var(--sheet)}
+.amt .cell,.amt .ro{text-align:right}
+.ro{display:block;padding:5px 6px}
+.note{color:var(--muted);font-size:13px}
+tr.flagged .name,tr.flagged .amt .cell,tr.flagged .amt .ro{color:var(--flag);font-weight:600}
+tr.flagged{background:var(--flag-bg)}
+tr.stale .amt .ro{color:var(--warn)}
+.badge{font-size:11.5px;padding:2px 7px;border-radius:10px;font-weight:600;white-space:nowrap}
+.b-api{background:var(--api-bg);color:var(--api)} .b-man{background:var(--rule);color:var(--muted)}
+.b-sample{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
+.ico{border:0;background:transparent;cursor:pointer;padding:4px 6px;border-radius:4px;color:var(--muted);font-size:15px}
+.ico:hover{background:var(--rule);color:var(--ink)}
+.ico.on{color:var(--flag)}
+.add{display:block;width:100%;border:0;border-top:1px dashed var(--rule);background:transparent;padding:8px;cursor:pointer;color:var(--muted);font-weight:500}
+.add:hover{color:var(--ink);background:var(--paper)}
+.srcsel{font-size:12.5px;padding:3px 4px;border:1px solid var(--rule);border-radius:4px;background:var(--sheet);max-width:100%}
+.empty{padding:14px;color:var(--muted);font-size:13.5px}
+
+dialog{border:1px solid var(--rule);border-radius:10px;background:var(--sheet);color:var(--ink);max-width:min(760px,94vw);width:100%;padding:0}
+dialog::backdrop{background:rgba(10,20,22,.45)}
+.dlg-head{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--rule)}
+.dlg-head h3{margin:0;font-size:16px}
+.dlg-body{padding:12px 16px;max-height:65vh;overflow:auto}
+.hist td{padding:7px 6px}
+/* auth */
+.auth{min-height:100vh;display:grid;place-items:center;padding:20px}
+.auth form{background:var(--sheet);border:1px solid var(--rule);border-radius:10px;padding:26px;width:min(380px,100%)}
+.auth h1{margin:0 0 4px;font-size:22px}
+.auth p{margin:0 0 18px;color:var(--muted);font-size:14px}
+label.f{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}
+.inp{width:100%;border:1px solid var(--rule);background:var(--sheet);border-radius:6px;padding:8px 10px}
+.auth .btn.primary{width:100%;margin-top:18px;padding:10px}
+.err-text{color:var(--flag);font-size:13.5px;margin-top:10px;min-height:1em}
+
+/* tabs + user */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--rule);max-width:1400px;margin:0 auto;padding:0 20px;overflow-x:auto}
+.tab{border:0;background:transparent;padding:12px 14px;cursor:pointer;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--api)}
+.userchip{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13.5px;white-space:nowrap;padding:6px 0}
+.role{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--rule)}
+.role.admin{background:var(--held-bg);color:var(--held)}
+.lock{max-width:1400px;margin:10px auto 0;padding:0 20px}
+.lock div{background:var(--api-bg);color:var(--api);border-radius:8px;padding:10px 14px;font-weight:500;font-size:14px}
+.view{max-width:1400px;margin:0 auto;padding:16px 20px 40px}
+.view.grid{padding-top:10px}
+td.who{width:110px;min-width:100px;font-size:12px;color:var(--muted);line-height:1.3}
+td.act{width:96px}
+.panel{background:var(--sheet);border:1px solid var(--rule);border-radius:8px;padding:16px;margin-bottom:18px}
+.panel h3{margin:0 0 10px;font-size:16px}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:12px}
+.filters label{font-size:12.5px;font-weight:600;display:flex;flex-direction:column;gap:3px}
+.filters .inp{padding:6px 8px;width:auto}
+table.log{min-width:900px}
+table.log th{text-align:left;font-size:12.5px;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--rule);background:var(--paper);position:sticky;top:0}
+table.log td{padding:7px 6px;font-size:13.5px;vertical-align:top}
+table.log td.r,table.log th.r{text-align:right}
+.from{color:var(--muted);text-decoration:line-through}
+.up{color:var(--flag)} .down{color:var(--owed)}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0 14px}
+.kv div{border:1px solid var(--rule);border-radius:6px;padding:8px 10px}
+.kv small{display:block;font-size:12px;color:var(--muted)} .kv b{font-size:17px}
+.kv .big{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.kv .big small{color:inherit;opacity:.75}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;font-size:14px;z-index:50;max-width:90vw;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1} .toast.err{background:var(--flag);color:#fff}
+.hidden{display:none!important}
+.row-gap{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<!-- Login / first-time setup -->
+<div class="auth hidden" id="authView">
+  <form id="authForm" autocomplete="on">
+    <h1 id="authTitle">Sign in</h1>
+    <p id="authSub">Balance reconciliation</p>
+    <div id="setupName" class="hidden"><label class="f" for="aName">Your name</label><input class="inp" id="aName"></div>
+    <label class="f" for="aUser">User ID</label><input class="inp" id="aUser" autocomplete="username" required>
+    <label class="f" for="aPass">Password</label><input class="inp" id="aPass" type="password" autocomplete="current-password" required>
+    <button class="btn primary" id="authBtn">Sign in</button>
+    <div class="err-text" id="authErr" role="alert"></div>
+  </form>
+</div>
+
+<div id="appView" class="hidden">
+  <div class="eq" aria-live="polite">
+    <div class="eq-inner">
+      <div class="term"><small>Payout</small><b id="t-payout">0</b></div><span class="op">+</span>
+      <div class="term"><small>Payin</small><b id="t-payin">0</b></div><span class="op">+</span>
+      <div class="term"><small>Other party</small><b id="t-other">0</b></div><span class="op">−</span>
+      <div class="term"><small>Bank accounts</small><b id="t-banks">0</b></div><span class="op">−</span>
+      <div class="term"><small>Other uses</small><b id="t-uses">0</b></div>
+      <div class="term result"><small id="t-diff-label">Difference</small><b id="t-diff">0</b></div>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="sheet">Sheet</button>
+    <button class="tab" role="tab" data-view="log">Activity log</button>
+    <button class="tab" role="tab" data-view="closing">Day-end closing</button>
+    <button class="tab admin-only" role="tab" data-view="users">Users</button>
+    <div class="userchip"><span id="meName"></span><span class="role" id="meRole"></span>
+      <button class="btn" id="pwBtn">Change password</button><button class="btn" id="logoutBtn">Log out</button></div>
+  </div>
+  <div class="lock hidden" id="lockBar"><div id="lockText"></div></div>
+
+  <!-- Sheet -->
+  <div id="v-sheet">
+    <div class="toolbar">
+      <h1 id="sheetTitle">Today</h1>
+      <button class="btn primary" id="syncBtn">Refresh API balances</button>
+      <button class="btn" id="goClose">Close today</button>
+      <button class="btn" id="csvBtn">Export to Excel (CSV)</button>
+      <div class="status" id="status"></div>
+    </div>
+    <div class="grid">
+      <div class="side owed"><h2><i></i>Owed to customers and parties</h2><div id="col-owed"></div></div>
+      <div class="side held"><h2><i></i>Where the money is</h2><div id="col-held"></div></div>
+    </div>
+  </div>
+
+  <!-- Activity log -->
+  <div id="v-log" class="view hidden">
+    <div class="filters">
+      <label>Date<input type="date" class="inp" id="logDate"></label>
+      <label>Person<select class="inp" id="logUser"><option value="">Everyone</option></select></label>
+      <label>Section<select class="inp" id="logSec"><option value="">All</option></select></label>
+      <label>Search<input class="inp" id="logQ" placeholder="Name, note, IP…"></label>
+      <button class="btn" id="logCsv">Export log</button>
+    </div>
+    <section><div class="scroll"><table class="log"><thead><tr>
+      <th>Time</th><th>Who</th><th>From where</th><th>Action</th><th>Section</th><th>Row</th><th>Field</th><th class="r">Before</th><th class="r">After</th>
+    </tr></thead><tbody id="logBody"></tbody></table></div><div class="empty hidden" id="logEmpty">Nothing recorded for this date.</div></section>
+  </div>
+
+  <!-- Day-end closing -->
+  <div id="v-closing" class="view hidden">
+    <div class="panel" id="closePanel">
+      <h3 id="closeTitle">Close today</h3>
+      <div class="kv" id="closeKv"></div>
+      <label class="f" for="closeRemarks">Remarks (optional)</label>
+      <input class="inp" id="closeRemarks" placeholder="e.g. HDFC statement pending">
+      <div class="row-gap" style="margin-top:12px"><button class="btn primary" id="closeBtn">Close today and lock entries</button></div>
+    </div>
+    <section><div class="scroll"><table class="log"><thead><tr>
+      <th>Date</th><th class="r">Payout</th><th class="r">Payin</th><th class="r">Other party</th><th class="r">Banks</th><th class="r">Other uses</th>
+      <th class="r">Difference</th><th class="r">Change from previous</th><th>Closed by</th><th>Remarks</th><th></th>
+    </tr></thead><tbody id="closeBody"></tbody></table></div><div class="empty hidden" id="closeEmpty">No days closed yet.</div></section>
+  </div>
+
+  <!-- Users -->
+  <div id="v-users" class="view hidden">
+    <div class="panel">
+      <h3>Add a person</h3>
+      <form id="addUser" class="filters" autocomplete="off">
+        <label>Name<input class="inp" id="nuName" required></label>
+        <label>User ID<input class="inp" id="nuUser" required></label>
+        <label>Password<input class="inp" id="nuPass" type="password" autocomplete="new-password" required minlength="6"></label>
+        <label>Role<select class="inp" id="nuRole"><option value="staff">Staff</option><option value="admin">Admin</option></select></label>
+        <button class="btn primary">Add person</button>
+      </form>
+      <div class="note">Staff can enter and edit data, refresh API balances, see the activity log and close the day. Admins can also delete rows, reopen a closed day and manage people.</div>
+    </div>
+    <section><div class="scroll"><table class="log"><thead><tr><th>Name</th><th>User ID</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr></thead><tbody id="usersBody"></tbody></table></div></section>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-head"><h3 id="dlgTitle"></h3><button class="ico" style="margin-left:auto" onclick="dlg.close()" aria-label="Close">✕</button></div>
+  <div class="dlg-body" id="dlgBody"></div>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const SECTIONS = [
+  {key:'payout',  title:'Payout wallets',       side:'owed', api:'payout', sub:'Balances from payout API'},
+  {key:'payin',   title:'Payin wallets',        side:'owed', api:'payin',  sub:'Balances from payin API'},
+  {key:'other',   title:'Other party payments', side:'owed', sub:'Entered manually'},
+  {key:'banks',   title:'Bank accounts',        side:'held', perRow:true, sub:'API or manual per account'},
+  {key:'uses',    title:'Other uses',           side:'held', sub:'Entered manually'},
+  {key:'recovery',title:'Recovery',             side:'held', sub:'Tracked separately, not in the difference'},
+];
+const SEC_NAME = Object.fromEntries(SECTIONS.map(s=>[s.key,s.title]));
+const FIELD_NAME = {amount:'Amount',name:'Name',note:'Note',flag:'Red flag',source:'Source',apiName:'API account',role:'Role',difference:'Difference'};
+
+let me=null, state=null, meta={}, users=[], pollTimer, view='sheet';
+const $ = id => document.getElementById(id);
+const fmt = n => n===null||n===undefined||n==='' ? '' : new Intl.NumberFormat('en-IN',{maximumFractionDigits:2}).format(Math.round((+n||0)*100)/100);
+const parseAmt = s => { const n=parseFloat(String(s).replace(/[^0-9.\-]/g,'')); return isNaN(n)?0:n; };
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dt = iso => iso ? new Date(iso).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+const tm = iso => new Date(iso).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const dLabel = d => new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+const nameOf = u => u==='API'?'API':u==='sheet'?'From sheet':(users.find(x=>x.username===u)?.name || u || '');
+
+function toast(msg,err=false){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); clearTimeout(t._h); t._h=setTimeout(()=>t.className='toast',err?5000:2500); }
+async function api(path,opts={}){
+  const r=await fetch(path,{headers:{'Content-Type':'application/json'},credentials:'same-origin',...opts,body:opts.body?JSON.stringify(opts.body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(r.status===401 && !path.startsWith('/api/login')){ showAuth(false); throw new Error('Please log in again'); }
+  if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+  return j;
+}
+
+/* ---------- Auth ---------- */
+let setupMode=false;
+function showAuth(setup){
+  setupMode=setup; clearInterval(pollTimer);
+  $('appView').classList.add('hidden'); $('authView').classList.remove('hidden');
+  $('authTitle').textContent = setup?'Create the admin account':'Sign in';
+  $('authSub').textContent = setup?'First-time setup. This person can add staff later.':'Balance reconciliation';
+  $('setupName').classList.toggle('hidden',!setup);
+  $('authBtn').textContent = setup?'Create admin':'Sign in';
+  $('aPass').autocomplete = setup?'new-password':'current-password';
+  $('authErr').textContent=''; $(setup?'aName':'aUser').focus();
+}
+$('authForm').onsubmit=async e=>{
+  e.preventDefault(); $('authErr').textContent='';
+  const body={username:$('aUser').value.trim(),password:$('aPass').value,name:$('aName').value.trim()};
+  try{
+    if(setupMode){ await api('/api/setup',{method:'POST',body}); }
+    const r=await api('/api/login',{method:'POST',body});
+    me=r.user; $('aPass').value=''; startApp();
+  }catch(err){ $('authErr').textContent=err.message; }
+};
+$('logoutBtn').onclick=async()=>{ await api('/api/logout',{method:'POST'}).catch(()=>{}); me=null; showAuth(false); };
+$('pwBtn').onclick=()=>{
+  openDlg('Change password',`<form id="pwForm"><label class="f">Current password<input class="inp" type="password" id="pwCur" autocomplete="current-password" required></label>
+    <label class="f">New password (6+ characters)<input class="inp" type="password" id="pwNew" autocomplete="new-password" minlength="6" required></label>
+    <div style="margin-top:14px"><button class="btn primary">Change password</button></div><div class="err-text" id="pwErr"></div></form>`);
+  $('pwForm').onsubmit=async e=>{ e.preventDefault();
+    try{ await api('/api/me/password',{method:'POST',body:{current:$('pwCur').value,password:$('pwNew').value}}); dlg.close(); toast('Password changed'); }
+    catch(err){ $('pwErr').textContent=err.message; } };
+};
+
+async function boot(){
+  const r=await api('/api/me').catch(()=>null);
+  if(!r){ document.body.innerHTML='<div class="auth"><div class="panel">Can\'t reach the server. Start it with <b>node server.js</b> and open http://localhost:3000.</div></div>'; return; }
+  if(r.setupNeeded) return showAuth(true);
+  if(!r.user) return showAuth(false);
+  me=r.user; startApp();
+}
+async function startApp(){
+  $('authView').classList.add('hidden'); $('appView').classList.remove('hidden');
+  $('meName').textContent=me.name; $('meRole').textContent=me.role==='admin'?'Admin':'Staff'; $('meRole').className='role '+me.role;
+  document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden',me.role!=='admin'));
+  if(me.role==='admin') users=await api('/api/users').catch(()=>[]);
+  await refresh(true); show('sheet');
+  clearInterval(pollTimer); pollTimer=setInterval(()=>refresh(false),8000);
+}
+
+/* ---------- Data ---------- */
+async function refresh(force){
+  const r=await api('/api/state'+(force||!meta.version?'':'?since='+meta.version)).catch(()=>null);
+  if(!r) return;
+  const lockChanged = r.locked!==meta.locked;
+  Object.assign(meta,{version:r.version,today:r.today,locked:r.locked,closing:r.closing,sources:r.sources});
+  if(r.unchanged && !lockChanged) return;
+  if(r.state) state=r.state;
+  // Don't redraw under someone who is typing; try again on the next poll
+  const editing=document.activeElement && document.activeElement.closest('#v-sheet table');
+  if(editing && !force){ meta.version=0; return; }
+  renderSheet(); renderLock();
+  if(view==='closing') renderClosing();
+}
+const sum = k => (state?.[k]||[]).reduce((a,r)=>a+(+r.amount||0),0);
+function totals(){ const t=Object.fromEntries(SECTIONS.map(s=>[s.key,sum(s.key)])); t.grand=t.payout+t.payin+t.other; t.diff=t.grand-t.banks-t.uses; return t; }
+const diffLabel = d => d>0?'Difference · short by this much':d<0?'Difference · funds exceed dues':'Difference · balanced';
+function renderTotals(){
+  const t=totals();
+  for(const k of ['payout','payin','other','banks','uses']) $('t-'+k).textContent=fmt(t[k]);
+  $('t-diff').textContent=fmt(t.diff); $('t-diff-label').textContent=diffLabel(t.diff);
+  for(const s of SECTIONS){ const el=$('tot-'+s.key); if(el) el.textContent=fmt(t[s.key]); }
+}
+function renderLock(){
+  $('lockBar').classList.toggle('hidden',!meta.locked);
+  if(meta.locked) $('lockText').textContent=`${dLabel(meta.today)} was closed by ${meta.closing.closedByName} at ${tm(meta.closing.closedAt)}. Entries are locked until tomorrow${me.role==='admin'?' or until you reopen it in Day-end closing':' unless an admin reopens it'}.`;
+  $('sheetTitle').textContent=dLabel(meta.today);
+  $('syncBtn').disabled=meta.locked; $('goClose').textContent=meta.locked?'View closing':'Close today';
+  const s=Object.entries(state.lastSync||{}).map(([k,v])=>`${k} ${dt(v)}`);
+  $('status').textContent = Object.values(meta.sources||{}).some(Boolean) ? (s.length?'Last API refresh: '+s.join(', '):'API not refreshed yet') : 'No API sources turned on yet (config.json).';
+}
+
+/* ---------- Sheet ---------- */
+function badge(r){
+  if(r.source==='api') return '<span class="badge b-api">API</span>';
+  if(r.source==='sample') return '<span class="badge b-sample" title="From your sheet. Replaced on the first API refresh.">Sheet</span>';
+  return '<span class="badge b-man">Manual</span>';
+}
+function rowHTML(sec,r,i){
+  const locked=meta.locked, editable=r.source!=='api' && !locked, stale=r.source==='api'&&r.stale;
+  let src=badge(r);
+  if(sec.perRow){
+    const names=state.apiNames?.banks||[];
+    const opts=names.map(n=>`<option ${n===r.apiName?'selected':''}>${esc(n)}</option>`).join('');
+    src=`<select class="srcsel" data-f="source" ${locked?'disabled':''} aria-label="Source">
+      <option value="manual" ${r.source!=='api'?'selected':''}>Manual</option><option value="api" ${r.source==='api'?'selected':''}>API</option></select>`
+      +(r.source==='api'?`<select class="srcsel" data-f="apiName" ${locked?'disabled':''} style="margin-top:3px" aria-label="API account"><option value="">Pick account…</option>${opts}${r.apiName&&!names.includes(r.apiName)?`<option selected>${esc(r.apiName)}</option>`:''}</select>`:'');
+  }
+  return `<tr data-id="${r.id}" class="${r.flag?'flagged':''} ${stale?'stale':''}">
+    <td class="n">${i+1}</td>
+    <td class="nm">${editable?`<input class="cell name" data-f="name" value="${esc(r.name)}" aria-label="Name">`:`<span class="ro name">${esc(r.name)}</span>`}</td>
+    <td class="nt"><input class="cell note" data-f="note" value="${esc(r.note)}" placeholder="Note" ${locked?'disabled':''} aria-label="Note"></td>
+    <td class="amt">${editable?`<input class="cell" data-f="amount" inputmode="decimal" value="${r.amount?fmt(r.amount):''}" placeholder="–" aria-label="Amount">`:`<span class="ro" title="${stale?'Missing from the latest API response':''}">${r.amount?fmt(r.amount):'–'}</span>`}</td>
+    <td class="src">${src}</td>
+    <td class="who">${r.updatedAt?`${esc(nameOf(r.updatedBy))}<br>${dt(r.updatedAt)}`:''}</td>
+    <td class="act"><button class="ico ${r.flag?'on':''}" data-a="flag" ${locked?'disabled':''} title="Highlight in red" aria-label="Highlight">⚑</button><button class="ico" data-a="hist" title="Row history" aria-label="Row history">🕘</button>${editable&&me.role==='admin'?`<button class="ico" data-a="del" title="Delete row" aria-label="Delete">✕</button>`:''}</td>
+  </tr>`;
+}
+function renderSheet(){
+  if(!state) return;
+  $('col-owed').innerHTML=''; $('col-held').innerHTML='';
+  for(const sec of SECTIONS){
+    const rows=state[sec.key]||[], el=document.createElement('section'); el.dataset.sec=sec.key;
+    el.innerHTML=`<div class="sec-head"><div><h3>${sec.title}</h3><div class="sub">${sec.sub}${sec.api&&!meta.sources?.[sec.api]?' · API off, rows are editable':''}</div></div><span class="tot" id="tot-${sec.key}">0</span></div>
+      <div class="scroll"><table><tbody>${rows.map((r,i)=>rowHTML(sec,r,i)).join('')}</tbody></table></div>
+      ${rows.length?'':'<div class="empty">No rows yet.</div>'}${meta.locked?'':'<button class="add" data-a="add">+ Add row</button>'}`;
+    $('col-'+sec.side).appendChild(el);
+  }
+  renderTotals();
+}
+const ctx = el => { const sec=el.closest('section')?.dataset.sec, id=el.closest('tr')?.dataset.id; return {sec,id,row:sec&&id?state[sec].find(r=>r.id===id):null}; };
+async function patch(sec,id,body){
+  try{ const r=await api(`/api/rows/${sec}/${id}`,{method:'PATCH',body}); const i=state[sec].findIndex(x=>x.id===id); state[sec][i]=r.row; meta.version=r.version; return r.row; }
+  catch(e){ toast(e.message,true); await refresh(true); }
+}
+document.addEventListener('input',e=>{
+  if(!e.target.closest('#v-sheet')||e.target.dataset.f!=='amount') return;
+  const {row}=ctx(e.target); if(row){ row.amount=parseAmt(e.target.value); renderTotals(); }
+});
+document.addEventListener('change',async e=>{
+  const f=e.target.dataset.f; if(!f||!e.target.closest('#v-sheet')) return;
+  const {sec,id}=ctx(e.target); if(!id) return;
+  let v=e.target.value; if(f==='amount'){ v=parseAmt(v); e.target.value=v?fmt(v):''; }
+  const row=await patch(sec,id,{[f]:v});
+  if(row){ const tr=e.target.closest('tr'); tr.querySelector('.who').innerHTML=`${esc(nameOf(row.updatedBy))}<br>${dt(row.updatedAt)}`; }
+  if(f==='source'||f==='apiName') renderSheet(); else renderTotals();
+});
+document.addEventListener('click',async e=>{
+  const a=e.target.dataset.a; if(!a||!e.target.closest('#v-sheet')) return;
+  const {sec,id,row}=ctx(e.target);
+  if(a==='add'){
+    try{ const r=await api('/api/rows',{method:'POST',body:{section:sec,name:'',amount:0}}); state[sec].push(r.row); meta.version=r.version; renderSheet();
+      const ins=document.querySelectorAll(`section[data-sec="${sec}"] input.name`); ins[ins.length-1]?.focus(); }
+    catch(err){ toast(err.message,true); }
+  }
+  if(a==='flag'){ await patch(sec,id,{flag:!row.flag}); renderSheet(); }
+  if(a==='del'){
+    if(!confirm(`Delete "${row.name||'this row'}" (${fmt(row.amount)||0})? This is recorded in the activity log.`)) return;
+    try{ const r=await api(`/api/rows/${sec}/${id}`,{method:'DELETE'}); state[sec]=state[sec].filter(x=>x.id!==id); meta.version=r.version; renderSheet(); toast('Row deleted'); }
+    catch(err){ toast(err.message,true); }
+  }
+  if(a==='hist'){
+    const list=await api('/api/audit?rowId='+id).catch(()=>[]);
+    openDlg(`History: ${row.name||'(no name)'}`, list.length?`<div class="scroll"><table class="log"><thead><tr><th>When</th><th>Who</th><th>From where</th><th>What</th><th class="r">Before</th><th class="r">After</th></tr></thead><tbody>
+      ${list.map(l=>`<tr><td>${dt(l.at)}</td><td>${esc(l.userName)}</td><td>${esc(l.ip)}<div class="note">${esc(l.device)}</div></td><td>${esc(l.action)} ${esc(FIELD_NAME[l.field]||l.field||'')}</td><td class="r from">${showVal(l.field,l.from)}</td><td class="r">${showVal(l.field,l.to)}</td></tr>`).join('')}
+      </tbody></table></div>`:'<div class="empty">No changes recorded for this row yet. API refreshes are listed in the activity log.</div>');
+  }
+});
+$('syncBtn').onclick=async()=>{
+  const b=$('syncBtn'); b.disabled=true; b.textContent='Refreshing…';
+  try{ const r=await api('/api/sync',{method:'POST'}); r.errors.length?toast('Refresh failed for '+r.errors.join(' | '),true):toast(`${r.changed} balance(s) updated`); }
+  catch(e){ toast(e.message,true); }
+  b.textContent='Refresh API balances'; await refresh(true);
+};
+$('goClose').onclick=()=>show('closing');
+$('csvBtn').onclick=()=>exportSheet(state,meta.today);
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>show(t.dataset.view));
+function show(v){
+  view=v;
+  document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.view===v));
+  for(const x of ['sheet','log','closing','users']) $('v-'+x).classList.toggle('hidden',x!==v);
+  if(v==='log') renderLog(); if(v==='closing') renderClosing(); if(v==='users') renderUsers();
+}
+
+/* ---------- Activity log ---------- */
+const showVal=(f,v)=> v===null||v===undefined ? '' : (f==='amount'||f==='difference') ? fmt(v) : typeof v==='boolean' ? (v?'Yes':'No') : esc(v);
+let logRows=[];
+$('logSec').innerHTML+=SECTIONS.map(s=>`<option value="${s.key}">${s.title}</option>`).join('');
+async function renderLog(load=true){
+  if(!$('logDate').value) $('logDate').value=meta.today;
+  if(load){ logRows=await api('/api/audit?date='+$('logDate').value).catch(()=>[]);
+    const people=[...new Map(logRows.map(l=>[l.user,l.userName])).entries()]; const cur=$('logUser').value;
+    $('logUser').innerHTML='<option value="">Everyone</option>'+people.map(([u,n])=>`<option value="${esc(u)}" ${u===cur?'selected':''}>${esc(n)}</option>`).join(''); }
+  const q=$('logQ').value.toLowerCase(), u=$('logUser').value, s=$('logSec').value;
+  const rows=logRows.filter(l=>(!u||l.user===u)&&(!s||l.section===s)&&(!q||JSON.stringify(l).toLowerCase().includes(q)));
+  $('logBody').innerHTML=rows.map((l,i)=>`<tr>
+    <td>${tm(l.at)}</td><td>${esc(l.userName)}<div class="note">${esc(l.role)}</div></td><td>${esc(l.ip)}<div class="note">${esc(l.device)}</div></td>
+    <td>${esc(l.action)}${l.details?.length?` <button class="btn" style="padding:2px 8px;font-size:12px" data-det="${i}">Details</button>`:''}</td>
+    <td>${esc(SEC_NAME[l.section]||'')}</td><td>${esc(l.rowName||'')}</td><td>${esc(FIELD_NAME[l.field]||l.field||'')}</td>
+    <td class="r from">${showVal(l.field,l.from)}</td><td class="r">${showVal(l.field,l.to)}</td></tr>`).join('');
+  $('logEmpty').classList.toggle('hidden',rows.length>0);
+  $('logBody').querySelectorAll('[data-det]').forEach(b=>b.onclick=()=>{ const l=rows[+b.dataset.det];
+    openDlg('API refresh details',`<div class="scroll"><table class="log"><thead><tr><th>Section</th><th>Account</th><th class="r">Before</th><th class="r">After</th></tr></thead><tbody>
+      ${l.details.map(d=>`<tr><td>${esc(SEC_NAME[d.section])}</td><td>${esc(d.rowName)}</td><td class="r from">${d.from===null?'new':fmt(d.from)}</td><td class="r">${fmt(d.to)}</td></tr>`).join('')}</tbody></table></div>`); });
+  $('logCsv').onclick=()=>download(`activity-${$('logDate').value}.csv`,[['Time','User','Role','IP','Device','Action','Section','Row','Field','Before','After'],
+    ...rows.map(l=>[new Date(l.at).toLocaleString('en-IN'),l.userName,l.role,l.ip,l.device,l.action,SEC_NAME[l.section]||'',l.rowName||'',FIELD_NAME[l.field]||l.field||'',l.from??'',l.to??''])]);
+}
+$('logDate').onchange=()=>renderLog(); $('logUser').onchange=$('logSec').onchange=$('logQ').oninput=()=>renderLog(false);
+
+/* ---------- Day-end closing ---------- */
+function kv(t){ return [['Payout',t.payout],['Payin',t.payin],['Other party',t.other],['Grand total',t.grand],['Bank accounts',t.banks],['Other uses',t.uses]]
+  .map(([k,v])=>`<div><small>${k}</small><b>${fmt(v)}</b></div>`).join('')+`<div class="big"><small>${diffLabel(t.diff).replace('Difference · ','Difference: ')}</small><b>${fmt(t.diff)}</b></div>`; }
+async function renderClosing(){
+  const list=await api('/api/closings').catch(()=>[]);
+  $('closeTitle').textContent = meta.locked ? `${dLabel(meta.today)} is closed` : `Close ${dLabel(meta.today)}`;
+  $('closeKv').innerHTML=kv(totals());
+  $('closeRemarks').parentElement; $('closeRemarks').classList.toggle('hidden',meta.locked); document.querySelector('label[for=closeRemarks]').classList.toggle('hidden',meta.locked);
+  $('closeBtn').classList.toggle('hidden',meta.locked);
+  $('closeBody').innerHTML=list.map(c=>{ const ch=c.prevDiff===null?null:c.totals.diff-c.prevDiff;
+    return `<tr><td><b>${dLabel(c.date)}</b></td><td class="r">${fmt(c.totals.payout)}</td><td class="r">${fmt(c.totals.payin)}</td><td class="r">${fmt(c.totals.other)}</td>
+    <td class="r">${fmt(c.totals.banks)}</td><td class="r">${fmt(c.totals.uses)}</td><td class="r"><b>${fmt(c.totals.diff)}</b></td>
+    <td class="r ${ch>0?'up':ch<0?'down':''}">${ch===null?'–':(ch>0?'+':'')+fmt(ch)}</td>
+    <td>${esc(c.closedByName)}<div class="note">${dt(c.closedAt)}, ${c.entries} entries</div></td><td>${esc(c.remarks)}</td>
+    <td class="act" style="width:auto;white-space:nowrap"><button class="btn" data-view="${c.date}">View</button>${me.role==='admin'?` <button class="btn" data-reopen="${c.date}">Reopen</button>`:''}</td></tr>`; }).join('');
+  $('closeEmpty').classList.toggle('hidden',list.length>0);
+  $('closeBody').querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>viewClosing(b.dataset.view));
+  $('closeBody').querySelectorAll('[data-reopen]').forEach(b=>b.onclick=async()=>{
+    if(!confirm(`Reopen ${dLabel(b.dataset.reopen)}? Its closing record will be removed so the day can be closed again.`)) return;
+    try{ await api('/api/closings/'+b.dataset.reopen,{method:'DELETE'}); toast('Day reopened'); await refresh(true); renderClosing(); }catch(e){ toast(e.message,true); } });
+}
+$('closeBtn').onclick=async()=>{
+  const t=totals();
+  if(!confirm(`Close ${dLabel(meta.today)} with a difference of ${fmt(t.diff)}?\n\nEntries will be locked for today.`)) return;
+  try{ await api('/api/closings',{method:'POST',body:{remarks:$('closeRemarks').value}}); $('closeRemarks').value=''; toast('Day closed'); await refresh(true); renderClosing(); }
+  catch(e){ toast(e.message,true); }
+};
+async function viewClosing(date){
+  const c=await api('/api/closings/'+date).catch(e=>toast(e.message,true)); if(!c) return;
+  openDlg(`Closing for ${dLabel(date)}`,`<div class="note">Closed by ${esc(c.closedByName)} at ${dt(c.closedAt)}${c.remarks?'. Remarks: '+esc(c.remarks):''}</div>
+    <div class="kv">${kv(c.totals)}</div><button class="btn" id="dlgCsv">Export to Excel (CSV)</button>
+    ${SECTIONS.map(s=>`<h4 style="margin:16px 0 6px">${s.title}: ${fmt(c.totals[s.key])}</h4><div class="scroll"><table class="log"><tbody>
+      ${(c.state[s.key]||[]).map((r,i)=>`<tr class="${r.flag?'flagged':''}"><td class="n">${i+1}</td><td class="name">${esc(r.name)}${r.note?`<div class="note">${esc(r.note)}</div>`:''}</td><td class="r">${fmt(r.amount)||'–'}</td><td class="note">${esc(nameOf(r.updatedBy))}</td></tr>`).join('')}
+    </tbody></table></div>`).join('')}`);
+  $('dlgCsv').onclick=()=>exportSheet(c.state,date);
+}
+
+/* ---------- Users ---------- */
+async function renderUsers(){
+  users=await api('/api/users').catch(()=>users);
+  $('usersBody').innerHTML=users.map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td>
+    <td><span class="role ${u.role}">${u.role==='admin'?'Admin':'Staff'}</span></td><td>${u.active?'Active':'<span class="up">Disabled</span>'}</td>
+    <td>${u.lastLogin?dt(u.lastLogin):'Never'}</td>
+    <td class="act" style="width:auto;white-space:nowrap"><button class="btn" data-u="${esc(u.username)}" data-do="pw">Reset password</button>
+      <button class="btn" data-u="${esc(u.username)}" data-do="role">Make ${u.role==='admin'?'staff':'admin'}</button>
+      <button class="btn" data-u="${esc(u.username)}" data-do="active">${u.active?'Disable':'Enable'}</button></td></tr>`).join('');
+  $('usersBody').querySelectorAll('[data-do]').forEach(b=>b.onclick=async()=>{
+    const u=users.find(x=>x.username===b.dataset.u), d=b.dataset.do; let body;
+    if(d==='pw'){ const p=prompt(`New password for ${u.name} (6+ characters)`); if(!p) return; body={password:p}; }
+    if(d==='role') body={role:u.role==='admin'?'staff':'admin'};
+    if(d==='active'){ if(u.active&&!confirm(`Disable ${u.name}? They will be logged out.`)) return; body={active:!u.active}; }
+    try{ await api('/api/users/'+u.username,{method:'PATCH',body}); toast('Saved'); renderUsers(); }catch(e){ toast(e.message,true); } });
+}
+$('addUser').onsubmit=async e=>{ e.preventDefault();
+  try{ await api('/api/users',{method:'POST',body:{name:$('nuName').value,username:$('nuUser').value,password:$('nuPass').value,role:$('nuRole').value}});
+    e.target.reset(); toast('Person added'); renderUsers(); }catch(err){ toast(err.message,true); } };
+
+/* ---------- Export ---------- */
+function download(name,rows){
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const blob=new Blob(['\ufeff'+rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+}
+function exportSheet(st,date){
+  const rows=[], tot={};
+  for(const s of SECTIONS){
+    rows.push([s.title]); rows.push(['Sr.No','Name','Amount','Source','Note','Last entry by','Last entry at']); let t=0;
+    (st[s.key]||[]).forEach((r,i)=>{ t+=+r.amount||0; rows.push([i+1,r.name,r.amount||0,r.source,r.note,nameOf(r.updatedBy),r.updatedAt?new Date(r.updatedAt).toLocaleString('en-IN'):'']); });
+    tot[s.key]=t; rows.push(['',s.title+' total',t]); rows.push([]);
+  }
+  const g=tot.payout+tot.payin+tot.other;
+  rows.push(['Grand total (Payout + Payin + Other party)','',g],['Bank total','',tot.banks],['Other uses total','',tot.uses],['Difference','',g-tot.banks-tot.uses]);
+  download(`reconciliation-${date}.csv`,rows);
+}
+
+/* ---------- Dialog ---------- */
+function openDlg(title,html){ $('dlgTitle').textContent=title; $('dlgBody').innerHTML=html; dlg.showModal(); }
+
+boot();
+</script>
+</body>
+</html>
