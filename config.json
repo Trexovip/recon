@@ -1,0 +1,43 @@
+{
+  "port": 3000,
+  "timezone": "Asia/Kolkata",
+  "autoRefreshMinutes": 0,
+  "sources": {
+    "payout": {
+      "enabled": false,
+      "url": "https://your-payout-api.example.com/wallets",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      },
+      "body": null,
+      "listPath": "data",
+      "nameField": "name",
+      "balanceField": "balance"
+    },
+    "payin": {
+      "enabled": false,
+      "url": "https://your-payin-api.example.com/wallets",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      },
+      "body": null,
+      "listPath": "data",
+      "nameField": "name",
+      "balanceField": "balance"
+    },
+    "banks": {
+      "enabled": false,
+      "url": "https://your-bank-api.example.com/accounts/balances",
+      "method": "GET",
+      "headers": {
+        "x-api-key": "YOUR_KEY"
+      },
+      "body": null,
+      "listPath": "accounts",
+      "nameField": "accountName",
+      "balanceField": "availableBalance"
+    }
+  }
+}
