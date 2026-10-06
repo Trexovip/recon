@@ -44,6 +44,34 @@ If a manual row in the sheet has the same name as an API account you tick, that 
 API (its notes and history are kept). Deleting a connection keeps its rows as manual entries.
 Saved API keys are never shown in full again.
 
+## Bank accounts with the same name
+Each bank account has **Bank**, **Account name** and **Account number**. The account number is what
+tells two accounts with the same name apart.
+- Manual bank rows: type the bank name and account number in the sheet. The sheet warns when two
+  accounts share a name without an account number, or when the same account number is entered twice.
+- Bank API connections: set the **Account number field**, and either the **Bank name field** (if the
+  API sends it) or a **fixed bank name** for that API. Test connection fills these in where it can and
+  warns if any accounts still can't be told apart.
+- Linking an API account to an existing manual row goes by account number first, then bank + name,
+  then name only when exactly one row has that name. So give your existing manual rows their account
+  numbers before ticking the API accounts, and each balance lands on the right row.
+- In **Choose accounts**, each account is its own row with its own tick box. Ticking one "kanika"
+  never ticks another "kanika". Accounts sharing a name are marked so you check the account number.
+- Changing the field mapping of a connection keeps what was ticked when it can be matched exactly
+  (by account number, or a name that only one account has). Accounts sharing a name that can't be
+  matched are left unticked and marked "Check", instead of ticking all of them.
+
+## Clearing today's data (admin)
+On the Sheet page, **Clear today's data** offers two ways:
+- **Set manual amounts to zero**: rows, names, banks and account numbers stay. API balances are not touched
+  (use Refresh API for those). Optionally also clear notes and red flags.
+- **Go back to the last closing**: the chosen sections are put back exactly as they were at the last day-end closing.
+
+Choose the sections, optionally delete today's profit & loss entries, check the preview (rows affected,
+difference before and after), and type CLEAR to confirm. A backup is saved in `data/backups/` first, and
+**Undo clear** on the Sheet page puts everything back (available the same day while the day is open).
+Not available once the day is closed: reopen it first. Every clear and undo is in the activity log.
+
 ## Who can do what
 | | Staff | Admin |
 |---|---|---|
@@ -51,6 +79,7 @@ Saved API keys are never shown in full again.
 | Refresh API balances, view reports, recon, log | Yes | Yes |
 | Close the day | Yes | Yes |
 | Delete rows and P&L entries | No | Yes |
+| Clear today's data, undo a clear | No | Yes |
 | Reopen a closed day, add entries to a closed day | No | Yes |
 | API connections, users, settings | No | Yes |
 
