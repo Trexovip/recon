@@ -1,8 +1,0 @@
-{
-  "name": "balance-reconciliation",
-  "version": "1.0.0",
-  "description": "Payout / bank / other-uses reconciliation with API-fed and manual balances",
-  "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" }
-}
