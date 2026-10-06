@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Balance Reconciliation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F4F6F5; --sheet:#FFFFFF; --ink:#1B2A30; --ink-2:#24363D; --muted:#5D6E73; --rule:#DCE3E1; --soft:#EEF2F1;
+  --owed:#0E6E66; --owed-bg:#E2F1EE; --held:#5B3F86; --held-bg:#EDE8F6;
+  --flag:#B42318; --flag-bg:#FDECEA; --api:#155EAA; --api-bg:#E5EFFA; --warn:#9A5B00; --warn-bg:#FFF4DF;
+  --gain:#137A43; --loss:#B42318;
+  --font:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0F1719; --sheet:#172226; --ink:#E6EEEC; --ink-2:#1E2C31; --muted:#93A5A9; --rule:#2A393E; --soft:#1C292D;
+  --owed:#5FC7B9; --owed-bg:#163430; --held:#B9A2E6; --held-bg:#28223D;
+  --flag:#FF8A80; --flag-bg:#3B1E1C; --api:#7FB6F2; --api-bg:#18304A; --warn:#F2B866; --warn-bg:#3A2C12; --gain:#5FD08F; --loss:#FF8A80;
+}}
+:root[data-theme="dark"]{
+  --paper:#0F1719; --sheet:#172226; --ink:#E6EEEC; --ink-2:#1E2C31; --muted:#93A5A9; --rule:#2A393E; --soft:#1C292D;
+  --owed:#5FC7B9; --owed-bg:#163430; --held:#B9A2E6; --held-bg:#28223D;
+  --flag:#FF8A80; --flag-bg:#3B1E1C; --api:#7FB6F2; --api-bg:#18304A; --warn:#F2B866; --warn-bg:#3A2C12; --gain:#5FD08F; --loss:#FF8A80;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font:14.5px/1.45 var(--font);font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--api);outline-offset:2px}
+h1,h2,h3,h4{margin:0}
+.hidden{display:none!important}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.pos{color:var(--loss)} .neg{color:var(--gain)}
+.gain{color:var(--gain)} .loss{color:var(--loss)}
+
+/* ---- Shell ---- */
+.shell{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+.side{background:#17262B;color:#DCE6E4;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;padding:18px 12px}
+.brand{font-weight:800;font-size:16px;padding:4px 10px 18px;color:#fff;line-height:1.25}
+.brand small{display:block;font-weight:500;font-size:12px;color:#93A9A6;margin-top:2px}
+.nav{display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.nav-group{font-size:12px;color:#7F9693;padding:14px 10px 4px}
+.nav button{display:flex;align-items:center;gap:10px;border:0;background:transparent;color:inherit;text-align:left;padding:9px 10px;border-radius:7px;cursor:pointer;font-weight:500}
+.nav button svg{width:17px;height:17px;flex:none;opacity:.8}
+.nav button:hover{background:rgba(255,255,255,.06)}
+.nav button[aria-current="page"]{background:#25404A;color:#fff}
+.nav button[aria-current="page"] svg{opacity:1}
+.nav .count{margin-left:auto;background:#C2410C;color:#fff;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px}
+.me{margin-top:auto;border-top:1px solid rgba(255,255,255,.1);padding:12px 10px 0;font-size:13px}
+.me b{display:block;color:#fff}
+.me .row-gap{margin-top:8px}
+.me button{background:transparent;border:1px solid rgba(255,255,255,.2);color:#DCE6E4;border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12.5px}
+.me button:hover{border-color:rgba(255,255,255,.5)}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.top{position:sticky;top:0;z-index:6;background:var(--sheet);border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:14px;padding:10px 24px;flex-wrap:wrap}
+.top h1{font-size:19px;font-weight:700}
+.top .date{color:var(--muted);font-size:13.5px}
+.chip{font-size:12.5px;font-weight:600;border-radius:12px;padding:3px 10px;white-space:nowrap}
+.chip.open{background:var(--owed-bg);color:var(--owed)} .chip.closed{background:var(--api-bg);color:var(--api)}
+.top .diff{margin-left:auto;text-align:right;line-height:1.15}
+.top .diff small{display:block;font-size:11.5px;color:var(--muted)}
+.top .diff b{font-size:20px;font-weight:800}
+.top .menu-btn{display:none}
+.content{padding:20px 24px 48px;max-width:1500px;width:100%}
+
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .side{position:fixed;inset:0 auto 0 0;width:250px;z-index:20;transform:translateX(-100%);transition:transform .2s}
+  .side.open{transform:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.35)}
+  .top .menu-btn{display:inline-flex}
+  .top{padding:10px 14px} .content{padding:14px 14px 40px}
+  .top .diff b{font-size:17px}
+}
+
+/* ---- Common pieces ---- */
+.btn{border:1px solid var(--rule);background:var(--sheet);padding:7px 13px;border-radius:7px;cursor:pointer;font-weight:500;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--api);border-color:var(--api);color:#fff}
+.btn.danger{color:var(--flag)}
+.btn.sm{padding:4px 9px;font-size:12.5px}
+.row-gap{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.spread{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.card{background:var(--sheet);border:1px solid var(--rule);border-radius:10px;padding:16px;min-width:0}
+.card h3{font-size:15px;font-weight:700;margin-bottom:10px}
+.card-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.card-head h3{margin:0}
+.card-head .right{margin-left:auto}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:1100px){.grid3,.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:700px){.grid2,.grid3,.grid4{grid-template-columns:1fr}}
+.stack{display:flex;flex-direction:column;gap:18px}
+.stat small{display:block;color:var(--muted);font-size:12.5px}
+.stat b{display:block;font-size:22px;font-weight:700;margin-top:2px}
+.stat .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+label.f{display:block;font-size:12.5px;font-weight:600;margin:0 0 4px}
+.inp{width:100%;border:1px solid var(--rule);background:var(--sheet);border-radius:7px;padding:7px 10px}
+textarea.inp{min-height:80px;resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:14px}
+.filters > label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;font-weight:600}
+.filters .inp{width:auto;min-width:130px}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:7px;overflow:hidden}
+.seg button{border:0;background:var(--sheet);padding:7px 12px;cursor:pointer;font-weight:500}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.empty{padding:22px;color:var(--muted);text-align:center;font-size:13.5px}
+.note{color:var(--muted);font-size:12.5px}
+.banner{border-radius:8px;padding:10px 14px;font-size:13.5px;font-weight:500;margin-bottom:16px}
+.banner.info{background:var(--api-bg);color:var(--api)}
+.banner.warn{background:var(--warn-bg);color:var(--warn)}
+.badge{font-size:11.5px;padding:2px 8px;border-radius:10px;font-weight:600;white-space:nowrap;display:inline-block}
+.b-api{background:var(--api-bg);color:var(--api)} .b-man{background:var(--soft);color:var(--muted)}
+.b-sample{border:1px dashed var(--muted);color:var(--muted)} .b-warn{background:var(--warn-bg);color:var(--warn)}
+.b-err{background:var(--flag-bg);color:var(--flag)} .b-ok{background:var(--owed-bg);color:var(--owed)}
+.b-in{background:var(--owed-bg);color:var(--gain)} .b-out{background:var(--flag-bg);color:var(--loss)}
+
+/* ---- Tables ---- */
+.scroll{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse}
+table.t th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px;border-bottom:1px solid var(--rule);white-space:nowrap;background:var(--soft)}
+table.t td{padding:7px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+table.t tr:last-child td{border-bottom:0}
+table.t .r{text-align:right;white-space:nowrap}
+table.t tfoot td{font-weight:700;background:var(--soft);border-top:1px solid var(--rule)}
+.from{color:var(--muted);text-decoration:line-through}
+
+/* ---- Dashboard equation ---- */
+.eq{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:16px;background:var(--ink);color:var(--paper);border-radius:12px;padding:18px 20px;margin-bottom:18px}
+.eq-terms{display:flex;flex-wrap:wrap;align-items:flex-end;row-gap:10px}
+@media (max-width:700px){.eq{grid-template-columns:1fr}.eq .res{text-align:left;border-left:0;padding-left:0;border-top:1px solid rgba(127,127,127,.35);padding-top:10px}}
+.eq .term{display:flex;flex-direction:column;justify-content:flex-end;padding-right:10px}
+.eq .term small{font-size:12px;opacity:.7}
+.eq .term b{font-size:clamp(15px,1.3vw,20px);font-weight:600}
+.eq .op{font-size:22px;opacity:.5;align-self:flex-end;padding-right:10px;line-height:1.3}
+.eq .res{text-align:right;border-left:1px solid rgba(255,255,255,.2);padding-left:20px}
+.eq .res b{font-size:clamp(26px,2.9vw,40px);font-weight:800;letter-spacing:-.01em}
+:root[data-theme="dark"] .eq .res,.eq .res{border-color:rgba(127,127,127,.35)}
+
+/* bars list */
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;font-size:13px}
+.bar-row .track{grid-column:1/-1;height:6px;background:var(--soft);border-radius:3px;overflow:hidden}
+.bar-row .fill{height:100%;border-radius:3px}
+.bar-row span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.alert{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule);font-size:13.5px}
+.alert:last-child{border-bottom:0}
+.alert i{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none}
+.alert.hi i{background:var(--flag)} .alert.md i{background:var(--warn)} .alert.lo i{background:var(--api)}
+.feed div{padding:7px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.feed div:last-child{border-bottom:0}
+
+/* charts */
+.chart svg{width:100%;height:auto;display:block}
+.chart .axis{stroke:var(--rule)} .chart text{fill:var(--muted);font-size:11px;font-family:var(--font)}
+.chart .line{fill:none;stroke:var(--api);stroke-width:2}
+.chart .area{fill:var(--api);opacity:.08}
+.chart .zero{stroke:var(--muted);stroke-dasharray:3 3}
+.chart .b-pos{fill:var(--gain)} .chart .b-neg{fill:var(--loss)}
+.chart .dot{fill:var(--api)}
+
+/* ---- Sheet ---- */
+.sheet-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+@media (max-width:1150px){.sheet-grid{grid-template-columns:1fr}}
+.col{min-width:0}
+.col h2{font-size:14.5px;margin:0 0 10px;display:flex;gap:8px;align-items:center}
+.col h2 i{width:10px;height:10px;border-radius:2px}
+.col.owed h2 i{background:var(--owed)} .col.held h2 i{background:var(--held)}
+.sec{background:var(--sheet);border:1px solid var(--rule);border-radius:10px;margin-bottom:18px;overflow:hidden}
+.sec-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.owed .sec-head{background:var(--owed-bg)} .held .sec-head{background:var(--held-bg)}
+.sec-head h3{font-size:14.5px}
+.sec-head .sub{font-size:12px;color:var(--muted)}
+.sec-head .tot{margin-left:auto;font-weight:700;font-size:16px}
+.owed .tot{color:var(--owed)} .held .tot{color:var(--held)}
+table.rows{width:100%;border-collapse:collapse;min-width:680px}
+table.rows td{border-bottom:1px solid var(--rule);padding:3px 6px;vertical-align:middle}
+table.rows tr:last-child td{border-bottom:0}
+td.n{width:34px;color:var(--muted);font-size:12px;text-align:right;padding-right:8px}
+td.nm{min-width:180px} td.nt{width:130px;min-width:110px}
+td.amt{width:140px;min-width:130px;text-align:right}
+td.src{width:90px} td.bk{width:120px;min-width:100px} td.acno{width:125px;min-width:110px}
+table.rows.banks{min-width:860px}
+table.rows.banks td.nm{min-width:150px}
+table.rows thead td{font-size:11.5px;color:var(--muted);font-weight:600;padding:6px 12px;background:var(--soft)}
+.hint{font-size:11px;font-weight:600;color:var(--warn);display:block;padding:0 6px} td.who{width:105px;font-size:11.5px;color:var(--muted);line-height:1.3}
+td.act{width:92px;text-align:right;white-space:nowrap}
+.cell{width:100%;border:1px solid transparent;background:transparent;padding:5px 6px;border-radius:5px}
+.cell:hover{border-color:var(--rule)} .cell:focus{border-color:var(--api);background:var(--sheet)}
+.amt .cell,.amt .ro{text-align:right} .amt .cell{min-width:120px}
+.ro{display:block;padding:5px 6px}
+.cell.note{color:var(--muted);font-size:13px}
+tr.flagged{background:var(--flag-bg)}
+tr.flagged .name,tr.flagged .amt .cell,tr.flagged .amt .ro{color:var(--flag);font-weight:600}
+tr.stale .amt .ro{color:var(--warn)}
+tr.hit{outline:2px solid var(--api);outline-offset:-2px}
+.ico{border:0;background:transparent;cursor:pointer;padding:4px 6px;border-radius:5px;color:var(--muted);font-size:14px}
+.ico:hover{background:var(--soft);color:var(--ink)}
+.ico.on{color:var(--flag)}
+.ico:disabled{opacity:.4;cursor:default}
+.add{display:block;width:100%;border:0;border-top:1px dashed var(--rule);background:transparent;padding:8px;cursor:pointer;color:var(--muted);font-weight:500}
+.add:hover{color:var(--ink);background:var(--soft)}
+
+/* waterfall */
+.walk{display:grid;grid-template-columns:minmax(120px,190px) 1fr 130px;gap:6px 12px;align-items:center;font-size:13.5px}
+.walk .w-track{position:relative;height:16px;background:var(--soft);border-radius:3px}
+.walk .w-bar{position:absolute;top:0;bottom:0;border-radius:3px}
+.walk .w-bar.total{background:var(--ink)} .walk .w-bar.up{background:var(--loss)} .walk .w-bar.down{background:var(--gain)}
+
+/* connections */
+.conn{border:1px solid var(--rule);border-radius:10px;padding:14px;background:var(--sheet)}
+.conn h4{font-size:15px}
+.kvline{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12.5px;color:var(--muted);margin:6px 0 10px}
+.hdr-row{display:grid;grid-template-columns:1fr 1.6fr auto;gap:8px;margin-bottom:6px}
+pre.sample{background:var(--soft);border-radius:7px;padding:10px;font-size:12px;max-height:260px;overflow:auto;margin:0}
+
+/* dialog, toast, auth */
+dialog{border:1px solid var(--rule);border-radius:12px;background:var(--sheet);color:var(--ink);max-width:min(900px,95vw);width:100%;padding:0}
+dialog::backdrop{background:rgba(10,20,22,.5)}
+.dlg-head{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--rule);gap:10px}
+.dlg-head h3{font-size:16px}
+.dlg-body{padding:14px 16px;max-height:72vh;overflow:auto}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;font-size:14px;z-index:60;max-width:90vw;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1} .toast.err{background:var(--flag);color:#fff}
+.auth{min-height:100vh;display:grid;place-items:center;padding:20px;background:#17262B}
+.auth form{background:var(--sheet);border-radius:12px;padding:28px;width:min(390px,100%)}
+.auth h1{font-size:22px;margin-bottom:4px}
+.auth p{margin:0 0 18px;color:var(--muted);font-size:14px}
+.auth .inp{margin-bottom:12px}
+.auth .btn.primary{width:100%;justify-content:center;margin-top:6px;padding:10px}
+.err-text{color:var(--flag);font-size:13.5px;margin-top:10px;min-height:1em}
+
+@media print{
+  .side,.top,.no-print,.btn{display:none!important}
+  .shell{display:block} .content{padding:0} body{background:#fff}
+  .card{break-inside:avoid;border-color:#ccc}
+}
+</style>
+</head>
+<body>
+<div class="auth hidden" id="authView">
+  <form id="authForm" autocomplete="on">
+    <h1 id="authTitle">Sign in</h1>
+    <p id="authSub"></p>
+    <div id="setupName" class="hidden"><label class="f" for="aName">Your name</label><input class="inp" id="aName"></div>
+    <label class="f" for="aUser">User ID</label><input class="inp" id="aUser" autocomplete="username" required>
+    <label class="f" for="aPass">Password</label><input class="inp" id="aPass" type="password" autocomplete="current-password" required>
+    <button class="btn primary" id="authBtn">Sign in</button>
+    <div class="err-text" id="authErr" role="alert"></div>
+  </form>
+</div>
+
+<div class="shell hidden" id="appView">
+  <aside class="side" id="side">
+    <div class="brand" id="brand">Balance Reconciliation<small>Payout reconciliation</small></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="me">
+      <b id="meName"></b><span id="meRole" class="small"></span>
+      <div class="row-gap"><button id="pwBtn">Change password</button><button id="logoutBtn">Log out</button></div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <button class="btn menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+      <h1 id="pageTitle">Dashboard</h1>
+      <span class="date" id="topDate"></span>
+      <span class="chip" id="dayChip"></span>
+      <div class="diff"><small id="topDiffLabel">Difference</small><b id="topDiff">0</b></div>
+      <button class="btn primary" id="syncBtn" title="Pull latest balances from all API connections">Refresh API</button>
+    </header>
+    <main class="content" id="content"></main>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-head"><h3 id="dlgTitle"></h3><span style="margin-left:auto"></span><button class="ico" onclick="dlg.close()" aria-label="Close">✕</button></div>
+  <div class="dlg-body" id="dlgBody"></div>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+<script>
+/* ================= Core ================= */
+const SECTIONS = [
+  {key:'payout',  title:'Payout wallets',       side:'owed', api:true, sub:'From API and manual entries'},
+  {key:'payin',   title:'Payin wallets',        side:'owed', api:true, sub:'From API and manual entries'},
+  {key:'other',   title:'Other party payments', side:'owed', sub:'Entered manually'},
+  {key:'banks',   title:'Bank accounts',        side:'held', api:true, sub:'From API and manual entries'},
+  {key:'uses',    title:'Other uses',           side:'held', sub:'Entered manually'},
+  {key:'recovery',title:'Recovery',             side:'held', sub:'Tracked separately, not in the difference'},
+];
+const SEC_NAME = {...Object.fromEntries(SECTIONS.map(s=>[s.key,s.title])), pnl:'Profit & loss'};
+const TARGET_NAME = {payout:'Payout wallets', payin:'Payin wallets', banks:'Bank accounts'};
+const FIELD_NAME = {amount:'Amount',name:'Name',note:'Note',flag:'Red flag',role:'Role',difference:'Difference',category:'Category',party:'Party',type:'Type',date:'Date',selected:'Accounts selected',target:'Goes to'};
+const ICONS = {
+  dashboard:'<path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/>',
+  sheet:'<path d="M4 4h16v16H4zM4 9h16M4 14h16M10 4v16"/>',
+  recon:'<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
+  pnl:'<path d="M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.6 5 3.2 5 1.4 5 3.3-2.2 3-5 3-5-1.1-5-3"/>',
+  reports:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  closing:'<path d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4"/>',
+  log:'<path d="M12 7v5l3 2M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9z"/>',
+  connections:'<path d="M9 7H6a5 5 0 0 0 0 10h3M15 7h3a5 5 0 0 1 0 10h-3M8 12h8"/>',
+  users:'<path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 19v-1a4 4 0 0 0-3-3.8M16 3.2a3.5 3.5 0 0 1 0 6.6"/>',
+  settings:'<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+};
+const PAGES = [
+  {id:'dashboard', title:'Dashboard'}, {id:'sheet', title:'Sheet'}, {id:'recon', title:'Recon data'},
+  {id:'pnl', title:'Profit & loss'}, {id:'reports', title:'Reports'}, {id:'closing', title:'Day-end closing'}, {id:'log', title:'Activity log'},
+  {group:'Admin'}, {id:'connections', title:'API connections', admin:true}, {id:'users', title:'Users', admin:true}, {id:'settings', title:'Settings', admin:true},
+];
+
+let me=null, state=null, meta={}, users=[], page='dashboard', pollTimer;
+const $ = id => document.getElementById(id);
+const fmt = n => n===null||n===undefined||n==='' ? '' : new Intl.NumberFormat('en-IN',{maximumFractionDigits:2}).format(Math.round((+n||0)*100)/100);
+const fmtS = n => (n>0?'+':'')+fmt(n);
+const short = n => { const a=Math.abs(n), s=n<0?'−':''; return a>=1e7?s+(a/1e7).toFixed(2)+' Cr':a>=1e5?s+(a/1e5).toFixed(2)+' L':a>=1e3?s+(a/1e3).toFixed(1)+' K':s+Math.round(a); };
+const parseAmt = s => { const n=parseFloat(String(s).replace(/[^0-9.\-]/g,'')); return isNaN(n)?0:n; };
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dt = iso => iso ? new Date(iso).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+const tm = iso => new Date(iso).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+const dLabel = d => new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+const dShort = d => new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+const addDays = (d,n) => { const x=new Date(d+'T00:00:00Z'); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); };
+const daysBetween = (a,b) => { const out=[]; for(let d=a; d<=b && out.length<400; d=addDays(d,1)) out.push(d); return out; };
+const nameOf = u => u==='API'?'API':u==='sheet'?'From sheet':(users.find(x=>x.username===u)?.name || u || '');
+const rowLabel = r => [r.bank, r.name, r.accountNo ? 'A/c ' + r.accountNo : ''].filter(Boolean).join(' – ');
+const isAdmin = () => me?.role==='admin';
+const diffWord = d => d>0?'Short by':d<0?'Funds exceed dues by':'Balanced';
+
+function toast(msg,err=false){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); clearTimeout(t._h); t._h=setTimeout(()=>t.className='toast',err?6000:2500); }
+async function api(path,opts={}){
+  const r=await fetch(path,{headers:{'Content-Type':'application/json'},credentials:'same-origin',...opts,body:opts.body!==undefined?JSON.stringify(opts.body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(r.status===401 && !path.startsWith('/api/login')){ showAuth(false); throw new Error('Please log in again'); }
+  if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+  return j;
+}
+function openDlg(title,html){ $('dlgTitle').textContent=title; $('dlgBody').innerHTML=html; if(!dlg.open) dlg.showModal(); return $('dlgBody'); }
+function download(name,rows){
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const blob=new Blob(['\ufeff'+rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+}
+
+/* ---------- Totals ---------- */
+function totalsOf(s){ const sum=k=>(s?.[k]||[]).reduce((a,r)=>a+(+r.amount||0),0); const t=Object.fromEntries(SECTIONS.map(x=>[x.key,sum(x.key)])); t.grand=t.payout+t.payin+t.other; t.diff=t.grand-t.banks-t.uses; return t; }
+const totals = () => totalsOf(state);
+
+/* ---------- Auth ---------- */
+let setupMode=false;
+function showAuth(setup){
+  setupMode=setup; clearInterval(pollTimer);
+  $('appView').classList.add('hidden'); $('authView').classList.remove('hidden');
+  $('authTitle').textContent=setup?'Create the admin account':'Sign in';
+  $('authSub').textContent=setup?'First-time setup. This person can add staff later.':(window._company||'Balance reconciliation');
+  $('setupName').classList.toggle('hidden',!setup);
+  $('authBtn').textContent=setup?'Create admin':'Sign in';
+  $('aPass').autocomplete=setup?'new-password':'current-password';
+  $('authErr').textContent=''; $(setup?'aName':'aUser').focus();
+}
+$('authForm').onsubmit=async e=>{
+  e.preventDefault(); $('authErr').textContent='';
+  const body={username:$('aUser').value.trim(),password:$('aPass').value,name:$('aName').value.trim()};
+  try{ if(setupMode) await api('/api/setup',{method:'POST',body}); const r=await api('/api/login',{method:'POST',body}); me=r.user; $('aPass').value=''; startApp(); }
+  catch(err){ $('authErr').textContent=err.message; }
+};
+$('logoutBtn').onclick=async()=>{ await api('/api/logout',{method:'POST'}).catch(()=>{}); me=null; showAuth(false); };
+$('pwBtn').onclick=()=>{
+  openDlg('Change password',`<form id="pwForm" style="max-width:360px"><label class="f">Current password</label><input class="inp" type="password" id="pwCur" autocomplete="current-password" required>
+    <label class="f" style="margin-top:10px">New password (6+ characters)</label><input class="inp" type="password" id="pwNew" autocomplete="new-password" minlength="6" required>
+    <div style="margin-top:14px"><button class="btn primary">Change password</button></div><div class="err-text" id="pwErr"></div></form>`);
+  $('pwForm').onsubmit=async e=>{ e.preventDefault();
+    try{ await api('/api/me/password',{method:'POST',body:{current:$('pwCur').value,password:$('pwNew').value}}); dlg.close(); toast('Password changed'); }
+    catch(err){ $('pwErr').textContent=err.message; } };
+};
+
+/* ---------- Shell ---------- */
+function renderNav(){
+  const errs=(meta.connections||[]).filter(c=>c.enabled&&c.lastError).length, fresh=(meta.connections||[]).reduce((a,c)=>a+c.newCount,0);
+  $('nav').innerHTML=PAGES.filter(p=>!p.admin||isAdmin()).filter(p=>!p.group||isAdmin()).map(p=>p.group?`<div class="nav-group">${p.group}</div>`:
+    `<button data-page="${p.id}" ${p.id===page?'aria-current="page"':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[p.id]}</svg>${p.title}${p.id==='connections'&&(errs||fresh)?`<span class="count" title="${errs} failing, ${fresh} new accounts to review">${errs+fresh}</span>`:''}</button>`).join('');
+  $('nav').querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));
+}
+function renderTop(){
+  const t=totals();
+  $('topDate').textContent=dLabel(meta.today);
+  $('dayChip').className='chip '+(meta.locked?'closed':'open');
+  $('dayChip').textContent=meta.locked?`Closed by ${meta.closing.closedByName} at ${tm(meta.closing.closedAt)}`:'Day open';
+  $('topDiff').textContent=fmt(Math.abs(t.diff)); $('topDiffLabel').textContent=diffWord(t.diff);
+  $('syncBtn').disabled=meta.locked || !(meta.connections||[]).some(c=>c.enabled);
+  $('brand').innerHTML=`${esc(meta.settings?.companyName||'Balance Reconciliation')}<small>Payout reconciliation</small>`;
+}
+$('menuBtn').onclick=()=>$('side').classList.toggle('open');
+function go(p){
+  page=p; $('side').classList.remove('open');
+  $('pageTitle').textContent=PAGES.find(x=>x.id===p)?.title||'';
+  renderNav(); window.scrollTo(0,0); renderPage();
+}
+function renderPage(){ const fn=window['page_'+page]; $('content').innerHTML=''; if(fn) fn($('content')); }
+
+$('syncBtn').onclick=async()=>{
+  const b=$('syncBtn'); b.disabled=true; b.textContent='Refreshing…';
+  try{ const r=await api('/api/sync',{method:'POST'});
+    r.errors.length?toast('Refresh failed: '+r.errors.join(' | '),true):toast(`${r.changed} change(s)${r.newAccounts?`, ${r.newAccounts} new account(s) found`:''}`); }
+  catch(e){ toast(e.message,true); }
+  b.textContent='Refresh API'; await refresh(true); if(['dashboard','sheet','connections'].includes(page)) renderPage();
+};
+
+async function boot(){
+  const r=await api('/api/me').catch(()=>null);
+  if(!r){ document.body.innerHTML='<div class="auth"><div class="card">Can\'t reach the server. Start it with <b>node server.js</b> and open http://localhost:3000.</div></div>'; return; }
+  window._company=r.companyName;
+  if(r.setupNeeded) return showAuth(true);
+  if(!r.user) return showAuth(false);
+  me=r.user; startApp();
+}
+async function startApp(){
+  $('authView').classList.add('hidden'); $('appView').classList.remove('hidden');
+  $('meName').textContent=me.name; $('meRole').textContent=isAdmin()?'Admin':'Staff';
+  users=isAdmin()?await api('/api/users').catch(()=>[]):[];
+  await refresh(true); go('dashboard');
+  clearInterval(pollTimer); pollTimer=setInterval(()=>refresh(false),10000);
+}
+async function refresh(force){
+  const r=await api('/api/state'+(force||!meta.version?'':'?since='+meta.version)).catch(()=>null);
+  if(!r) return;
+  const changedMeta = r.locked!==meta.locked || JSON.stringify(r.connections)!==JSON.stringify(meta.connections);
+  Object.assign(meta,{version:r.version,today:r.today,locked:r.locked,closing:r.closing,connections:r.connections,settings:r.settings,pnlToday:r.pnlToday,activityToday:r.activityToday});
+  if(r.state) state=r.state;
+  renderTop(); if(changedMeta) renderNav();
+  if(force || (!r.unchanged || changedMeta)){
+    const typing=document.activeElement && document.activeElement.matches('input,textarea,select') && $('content').contains(document.activeElement);
+    if(!force && typing){ meta.version=0; return; }
+    if(!force && ['dashboard','sheet'].includes(page)) renderPage();
+  }
+}
+
+/* ---------- Charts (plain SVG) ---------- */
+function lineChart(points,{h=200,zero=true}={}){
+  if(points.length<2) return '<div class="empty">Not enough closings yet. The trend appears after two day-end closings.</div>';
+  const W=640,H=h,pl=62,pr=12,pt=12,pb=26, ys=points.map(p=>p.y);
+  let lo=Math.min(...ys), hi=Math.max(...ys); if(zero){lo=Math.min(lo,0);hi=Math.max(hi,0);} if(lo===hi){lo-=1;hi+=1;}
+  const pad=(hi-lo)*.08; lo-=pad; hi+=pad;
+  const x=i=>pl+i*(W-pl-pr)/(points.length-1), y=v=>pt+(hi-v)*(H-pt-pb)/(hi-lo);
+  const d=points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join('');
+  const ticks=[hi-pad,(hi+lo)/2,lo+pad];
+  const every=Math.ceil(points.length/7);
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Trend chart">
+    ${ticks.map(t=>`<line class="axis" x1="${pl}" x2="${W-pr}" y1="${y(t)}" y2="${y(t)}"/><text x="${pl-6}" y="${y(t)+4}" text-anchor="end">${short(t)}</text>`).join('')}
+    ${zero&&lo<0&&hi>0?`<line class="zero" x1="${pl}" x2="${W-pr}" y1="${y(0)}" y2="${y(0)}"/>`:''}
+    <path class="area" d="${d}L${x(points.length-1)},${y(Math.max(lo,Math.min(0,hi)))}L${x(0)},${y(Math.max(lo,Math.min(0,hi)))}Z"/>
+    <path class="line" d="${d}"/>
+    ${points.map((p,i)=>`<circle class="dot" cx="${x(i)}" cy="${y(p.y)}" r="${points.length>40?1.5:3}"><title>${esc(p.label)}: ${fmt(p.y)}</title></circle>`).join('')}
+    ${points.map((p,i)=>i%every===0||i===points.length-1?`<text x="${x(i)}" y="${H-6}" text-anchor="middle">${esc(p.short||p.label)}</text>`:'').join('')}
+  </svg></div>`;
+}
+function barChart(points,{h=200}={}){
+  if(!points.length||points.every(p=>!p.y)) return '<div class="empty">No entries in this period yet.</div>';
+  const W=640,H=h,pl=62,pr=12,pt=12,pb=26, ys=points.map(p=>p.y);
+  let lo=Math.min(0,...ys), hi=Math.max(0,...ys); if(lo===hi) hi=1;
+  const y=v=>pt+(hi-v)*(H-pt-pb)/(hi-lo), bw=(W-pl-pr)/points.length, every=Math.ceil(points.length/7);
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart">
+    ${[hi,0,lo].filter((v,i,a)=>a.indexOf(v)===i).map(t=>`<line class="${t===0?'zero':'axis'}" x1="${pl}" x2="${W-pr}" y1="${y(t)}" y2="${y(t)}"/><text x="${pl-6}" y="${y(t)+4}" text-anchor="end">${short(t)}</text>`).join('')}
+    ${points.map((p,i)=>`<rect class="${p.y>=0?'b-pos':'b-neg'}" x="${pl+i*bw+bw*.15}" width="${Math.max(1,bw*.7)}" y="${Math.min(y(0),y(p.y))}" height="${Math.max(p.y?1:0,Math.abs(y(p.y)-y(0)))}"><title>${esc(p.label)}: ${fmt(p.y)}</title></rect>`).join('')}
+    ${points.map((p,i)=>i%every===0?`<text x="${pl+i*bw+bw/2}" y="${H-6}" text-anchor="middle">${esc(p.short||p.label)}</text>`:'').join('')}
+  </svg></div>`;
+}
+function barsList(items,color){
+  const max=Math.max(...items.map(i=>Math.abs(i.v)),1);
+  return items.length?`<div class="bars">${items.map(i=>`<div class="bar-row"><span title="${esc(i.k)}">${esc(i.k)}</span><b>${fmt(i.v)}</b><div class="track"><div class="fill" style="width:${Math.abs(i.v)/max*100}%;background:${color}"></div></div></div>`).join('')}</div>`:'<div class="empty">Nothing yet.</div>';
+}
+
+/* ================= Dashboard ================= */
+let closingsCache=null;
+async function getClosings(force){ if(force||!closingsCache) closingsCache=await api('/api/closings').catch(()=>[]); return closingsCache; }
+
+async function page_dashboard(el){
+  const t=totals();
+  el.innerHTML=`
+    <div class="eq"><div class="eq-terms">
+      <div class="term"><small>Payout wallets</small><b>${fmt(t.payout)}</b></div><span class="op">+</span>
+      <div class="term"><small>Payin wallets</small><b>${fmt(t.payin)}</b></div><span class="op">+</span>
+      <div class="term"><small>Other party</small><b>${fmt(t.other)}</b></div><span class="op">−</span>
+      <div class="term"><small>Bank accounts</small><b>${fmt(t.banks)}</b></div><span class="op">−</span>
+      <div class="term"><small>Other uses</small><b>${fmt(t.uses)}</b></div></div>
+      <div class="term res"><small>${diffWord(t.diff)}</small><b>${fmt(Math.abs(t.diff))}</b></div>
+    </div>
+    <div class="grid4" id="dStats"></div>
+    <div class="grid2" style="margin-top:18px">
+      <div class="card"><div class="card-head"><h3>Difference at each day-end closing</h3><span class="right note">Last 30 days, today live</span></div><div id="dTrend"></div></div>
+      <div class="card"><div class="card-head"><h3>Daily profit and loss</h3><span class="right note">Income − expenses, last 30 days</span></div><div id="dPnl"></div></div>
+    </div>
+    <div class="grid3" style="margin-top:18px">
+      <div class="card"><h3>Needs attention</h3><div id="dAlerts"></div></div>
+      <div class="card"><h3>Where the money is</h3><div id="dHeld"></div></div>
+      <div class="card"><h3>Largest payout wallets</h3><div id="dWallets"></div></div>
+    </div>
+    <div class="grid2" style="margin-top:18px">
+      <div class="card"><div class="card-head"><h3>API connections</h3>${isAdmin()?'<button class="btn sm right" id="dConn">Manage</button>':''}</div><div id="dConns"></div></div>
+      <div class="card"><div class="card-head"><h3>Today's activity</h3><button class="btn sm right" id="dLog">Open log</button></div><div class="feed" id="dFeed"></div></div>
+    </div>`;
+  $('dLog').onclick=()=>go('log'); if($('dConn')) $('dConn').onclick=()=>go('connections');
+
+  const [closings,pnlRows,feed]=await Promise.all([getClosings(true), api(`/api/pnl?from=${addDays(meta.today,-29)}&to=${meta.today}`).catch(()=>[]), api('/api/audit?date='+meta.today).catch(()=>[])]);
+  if(page!=='dashboard') return;
+  const sorted=[...closings].sort((a,b)=>a.date.localeCompare(b.date));
+  const prev=sorted.filter(c=>c.date<meta.today).pop();
+  const move=prev?t.diff-prev.totals.diff:null, pt=meta.pnlToday||{income:0,expense:0,net:0};
+  const month=pnlRows.filter(e=>e.date.slice(0,7)===meta.today.slice(0,7)), mNet=month.reduce((a,e)=>a+(e.type==='income'?e.amount:-e.amount),0);
+  $('dStats').innerHTML=`
+    <div class="card stat"><small>Today's profit / loss</small><b class="${pt.net>=0?'gain':'loss'}">${fmtS(pt.net)}</b><div class="sub">Income ${fmt(pt.income)}, expenses ${fmt(pt.expense)}</div></div>
+    <div class="card stat"><small>This month's profit / loss</small><b class="${mNet>=0?'gain':'loss'}">${fmtS(mNet)}</b><div class="sub">${month.length===1?'1 entry':month.length+' entries'}</div></div>
+    <div class="card stat"><small>Difference change since last closing</small><b class="${move===null?'':move>0?'loss':'gain'}">${move===null?'–':fmtS(move)}</b><div class="sub">${prev?'Compared with '+dShort(prev.date):'No earlier closing yet'}</div></div>
+    <div class="card stat"><small>Day status</small><b>${meta.locked?'Closed':'Open'}</b><div class="sub">${meta.locked?`by ${esc(meta.closing.closedByName)} at ${tm(meta.closing.closedAt)}`:`${meta.activityToday===1?'1 entry':meta.activityToday+' entries'} so far today`}</div></div>`;
+
+  const last=sorted.filter(c=>c.date>=addDays(meta.today,-29)&&c.date<meta.today).map(c=>({label:dLabel(c.date),short:dShort(c.date),y:c.totals.diff}));
+  last.push({label:'Today (live)',short:'Today',y:t.diff});
+  $('dTrend').innerHTML=lineChart(last);
+  const byDay={}; for(const e of pnlRows) byDay[e.date]=(byDay[e.date]||0)+(e.type==='income'?e.amount:-e.amount);
+  $('dPnl').innerHTML=barChart(daysBetween(addDays(meta.today,-29),meta.today).map(d=>({label:dLabel(d),short:dShort(d),y:byDay[d]||0})));
+
+  // alerts
+  const alerts=[], th=+meta.settings.alertThreshold||0;
+  for(const c of meta.connections.filter(c=>c.enabled&&c.lastError)) alerts.push(['hi',`<b>${esc(c.name)}</b> failed to refresh: ${esc(c.lastError)}`]);
+  for(const c of meta.connections.filter(c=>c.reviewCount)) alerts.push(['md',`<b>${esc(c.name)}</b>: ${c.reviewCount} account(s) with a shared name need to be ticked again`]);
+  for(const c of meta.connections.filter(c=>c.dupCount)) alerts.push(['md',`<b>${esc(c.name)}</b> has accounts with the same name and no account number. Set the account number field.`]);
+  for(const c of meta.connections.filter(c=>c.newCount)) alerts.push(['md',`<b>${esc(c.name)}</b> has ${c.newCount} new account(s) to review${isAdmin()?'':' (admin)'}`]);
+  const stale=SECTIONS.flatMap(s=>state[s.key].filter(r=>r.stale).map(rowLabel));
+  if(stale.length) alerts.push(['md',`${stale.length} API account(s) missing from the latest refresh: ${esc(stale.slice(0,4).join(', '))}${stale.length>4?'…':''}`]);
+  const flagged=SECTIONS.flatMap(s=>state[s.key].filter(r=>r.flag).map(r=>`${rowLabel(r)} (${fmt(r.amount)})`));
+  if(flagged.length) alerts.push(['lo',`${flagged.length} flagged row(s): ${esc(flagged.slice(0,3).join(', '))}${flagged.length>3?'…':''}`]);
+  if(!meta.locked && new Date().getHours()>=20) alerts.push(['lo','Today has not been closed yet']);
+  if(prev && th){
+    const full=await api('/api/closings/'+prev.date).catch(()=>null);
+    if(full){ const old={}; for(const s of SECTIONS) for(const r of full.state[s.key]||[]) old[r.id]=r.amount;
+      const big=SECTIONS.flatMap(s=>state[s.key].filter(r=>Math.abs((r.amount||0)-(old[r.id]||0))>=th).map(r=>({n:rowLabel(r),d:(r.amount||0)-(old[r.id]||0)})));
+      big.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d));
+      for(const b of big.slice(0,5)) alerts.unshift(['md',`<b>${esc(b.n)}</b> moved ${fmtS(b.d)} since ${dShort(prev.date)}`]); } }
+  if(page!=='dashboard') return;
+  $('dAlerts').innerHTML=alerts.length?alerts.map(([l,h])=>`<div class="alert ${l}"><i></i><div>${h}</div></div>`).join(''):'<div class="empty">All clear.</div>';
+
+  const held=[...state.banks.map(r=>({k:rowLabel(r),v:r.amount||0})),...state.uses.map(r=>({k:r.name,v:r.amount||0}))].filter(i=>i.v).sort((a,b)=>b.v-a.v).slice(0,8);
+  $('dHeld').innerHTML=`<div class="note" style="margin-bottom:8px">Banks ${fmt(t.banks)} and other uses ${fmt(t.uses)}. Top 8:</div>`+barsList(held,'var(--held)');
+  $('dWallets').innerHTML=barsList(state.payout.map(r=>({k:r.name,v:r.amount||0})).filter(i=>i.v).sort((a,b)=>b.v-a.v).slice(0,8),'var(--owed)');
+  $('dConns').innerHTML=meta.connections.length?`<table class="t"><tbody>${meta.connections.map(c=>`<tr><td><b>${esc(c.name)}</b><div class="note">${TARGET_NAME[c.target]}</div></td>
+    <td>${!c.enabled?'<span class="badge b-man">Off</span>':c.lastError?'<span class="badge b-err">Failing</span>':c.lastSync?'<span class="badge b-ok">OK</span>':'<span class="badge b-warn">Not run</span>'}</td>
+    <td class="r">${c.selectedCount} of ${c.knownCount} accounts<div class="note">${c.lastSync?dt(c.lastSync):'Never refreshed'}</div></td></tr>`).join('')}</tbody></table>`
+    :`<div class="empty">No API connections yet.${isAdmin()?' Add one in API connections.':''}</div>`;
+  const items=feed.filter(e=>e.action!=='Logged in'&&e.action!=='Logged out').slice(0,8);
+  $('dFeed').innerHTML=items.length?items.map(e=>`<div><b>${esc(e.userName)}</b>: ${esc(e.action)}${e.rowName?` <b>${esc(e.rowName)}</b>`:''}${e.field==='amount'&&e.to!=null?` to ${fmt(e.to)}`:''} <span class="note">${tm(e.at)}</span></div>`).join(''):'<div class="empty">No entries yet today.</div>';
+}
+
+/* ================= Sheet ================= */
+let sheetFilter={q:'',flagged:false};
+function page_sheet(el){
+  const lc=state.lastClear && state.lastClear.date===meta.today ? state.lastClear : null;
+  el.innerHTML=`${lc?`<div class="banner warn spread"><span>Today's data was cleared by ${esc(lc.byName)} at ${tm(lc.at)}: ${lc.mode==='zero'?'manual amounts set to zero':'went back to the closing of '+dShort(lc.fromDate)} in ${lc.sections.map(k=>SEC_NAME[k]).join(', ')||'no sheet sections'}${lc.pnlRemoved?`, ${lc.pnlRemoved} P&L entr${lc.pnlRemoved===1?'y':'ies'} deleted`:''}.</span>${isAdmin()&&!meta.locked?'<button class="btn sm" id="sUndo">Undo clear</button>':''}</div>`:''}${meta.locked?`<div class="banner info">${dLabel(meta.today)} is closed. Entries are locked${isAdmin()?' until tomorrow, or reopen it in Day-end closing':' until tomorrow unless an admin reopens it'}.</div>`:''}
+    <div class="filters no-print">
+      <label>Find<input class="inp" id="sQ" placeholder="Name, bank, A/c no or note" value="${esc(sheetFilter.q)}"></label>
+      <label style="flex-direction:row;align-items:center;gap:6px;font-weight:500;padding-bottom:7px"><input type="checkbox" id="sFlag" ${sheetFilter.flagged?'checked':''}> Flagged only</label>
+      <span style="margin-left:auto"></span>
+      ${isAdmin()?`<button class="btn danger" id="sClear" ${meta.locked?'disabled title="Reopen the day first"':''}>Clear today's data</button>`:''}
+      <button class="btn" id="sCsv">Export to Excel (CSV)</button>
+    </div>
+    <div class="sheet-grid"><div class="col owed"><h2><i></i>Owed to customers and parties</h2><div id="col-owed"></div></div>
+    <div class="col held"><h2><i></i>Where the money is</h2><div id="col-held"></div></div></div>`;
+  $('sQ').oninput=e=>{sheetFilter.q=e.target.value; drawSheet();};
+  $('sFlag').onchange=e=>{sheetFilter.flagged=e.target.checked; drawSheet();};
+  $('sCsv').onclick=()=>exportSheet(state,meta.today);
+  if($('sClear')) $('sClear').onclick=clearTodayDialog;
+  if($('sUndo')) $('sUndo').onclick=async()=>{
+    if(!confirm('Undo the clear? The cleared sections go back to how they were just before clearing. Any changes made in those sections since then will be replaced.')) return;
+    try{ await api('/api/clear-today/undo',{method:'POST'}); toast('Clear undone'); await refresh(true); page_sheet($('content')); }catch(e){ toast(e.message,true); } };
+  drawSheet();
+}
+function connName(id){ return meta.connections.find(c=>c.id===id)?.name||'API'; }
+function badge(r){
+  if(r.source==='api') return `<span class="badge b-api" title="${esc(connName(r.connId))}">API</span>`;
+  if(r.source==='sample') return '<span class="badge b-sample" title="From your original sheet">Sheet</span>';
+  return '<span class="badge b-man">Manual</span>';
+}
+function rowHTML(r,i,secKey,hint){
+  const L=meta.locked, editable=r.source!=='api'&&!L;
+  const bankCell=(f,ph)=>{ const canEdit=!L&&(r.source!=='api'||!r[f]); return canEdit?`<input class="cell" data-f="${f}" value="${esc(r[f]||'')}" placeholder="${ph}" aria-label="${ph}">`:`<span class="ro">${esc(r[f]||'')}</span>`; };
+  return `<tr data-id="${r.id}" class="${r.flag?'flagged':''} ${r.stale?'stale':''}">
+    <td class="n">${i+1}</td>
+    ${secKey==='banks'?`<td class="bk">${bankCell('bank','Bank')}</td>`:''}
+    <td class="nm">${editable?`<input class="cell name" data-f="name" value="${esc(r.name)}" aria-label="Name">`:`<span class="ro name">${esc(r.name)}</span>`}${hint?`<span class="hint">${hint}</span>`:''}</td>
+    ${secKey==='banks'?`<td class="acno">${bankCell('accountNo','A/c no')}</td>`:''}
+    <td class="amt">${editable?`<input class="cell" data-f="amount" inputmode="decimal" value="${r.amount?fmt(r.amount):''}" placeholder="–" aria-label="Amount">`:`<span class="ro" title="${r.stale?'Missing from the latest API refresh':''}">${r.amount?fmt(r.amount):'–'}</span>`}</td>
+    <td class="nt"><input class="cell note" data-f="note" value="${esc(r.note)}" placeholder="Note" ${L?'disabled':''} aria-label="Note"></td>
+    <td class="src">${badge(r)}${r.stale?' <span class="badge b-warn" title="Missing from the latest API refresh">!</span>':''}</td>
+    <td class="who">${r.updatedAt?`${esc(nameOf(r.updatedBy))}<br>${dt(r.updatedAt)}`:''}</td>
+    <td class="act"><button class="ico ${r.flag?'on':''}" data-a="flag" ${L?'disabled':''} title="Highlight in red" aria-label="Highlight">⚑</button><button class="ico" data-a="hist" title="Row history" aria-label="Row history">🕘</button>${editable&&isAdmin()?'<button class="ico" data-a="del" title="Delete row" aria-label="Delete">✕</button>':''}</td></tr>`;
+}
+function drawSheet(){
+  if(!$('col-owed')) return;
+  const q=sheetFilter.q.toLowerCase();
+  const match=r=>(!q||[r.name,r.note,r.bank,r.accountNo].join(' ').toLowerCase().includes(q))&&(!sheetFilter.flagged||r.flag);
+  $('col-owed').innerHTML=''; $('col-held').innerHTML='';
+  const t=totals();
+  // spot bank rows that can't be told apart
+  const bankHints={}, byAcc={}, byName={};
+  for(const r of state.banks){ if(r.accountNo){ const k=(r.bank||'').toLowerCase()+'|'+r.accountNo; (byAcc[k]??=[]).push(r); } else { const k=(r.bank||'').toLowerCase()+'|'+r.name.toLowerCase().trim(); (byName[k]??=[]).push(r); } }
+  for(const g of Object.values(byAcc)) if(g.length>1) g.forEach(r=>bankHints[r.id]='Same account number entered twice');
+  for(const g of Object.values(byName)) if(g.length>1) g.forEach(r=>bankHints[r.id]='Same name as another account: add the account number');
+  for(const sec of SECTIONS){
+    const all=state[sec.key]||[], rows=all.map((r,i)=>[r,i]).filter(([r])=>match(r));
+    const el=document.createElement('div'); el.className='sec'; el.dataset.sec=sec.key;
+    const apiCount=all.filter(r=>r.source==='api').length;
+    el.innerHTML=`<div class="sec-head"><div><h3>${sec.title}</h3><div class="sub">${sec.api?`${apiCount} from API, ${all.length-apiCount} manual`:sec.sub}</div></div><span class="tot" id="tot-${sec.key}">${fmt(t[sec.key])}</span></div>
+      <div class="scroll"><table class="rows ${sec.key==='banks'?'banks':''}">${sec.key==='banks'&&rows.length?'<thead><tr><td></td><td>Bank</td><td>Account name</td><td>Account number</td><td style="text-align:right">Balance</td><td>Note</td><td></td><td></td><td></td></tr></thead>':''}<tbody>${rows.map(([r,i])=>rowHTML(r,i,sec.key,sec.key==='banks'?bankHints[r.id]:'')).join('')}</tbody></table></div>
+      ${rows.length?'':`<div class="empty">${all.length?'No rows match.':'No rows yet.'}</div>`}${meta.locked?'':'<button class="add" data-a="add">+ Add manual entry</button>'}`;
+    $('col-'+sec.side).appendChild(el);
+  }
+}
+function updateSheetTotals(){ const t=totals(); for(const s of SECTIONS){ const e=$('tot-'+s.key); if(e) e.textContent=fmt(t[s.key]); } renderTop(); }
+const rowCtx = el => { const sec=el.closest('.sec')?.dataset.sec, id=el.closest('tr')?.dataset.id; return {sec,id,row:sec&&id?state[sec].find(r=>r.id===id):null}; };
+async function patchRow(sec,id,body){
+  try{ const r=await api(`/api/rows/${sec}/${id}`,{method:'PATCH',body}); const i=state[sec].findIndex(x=>x.id===id); state[sec][i]=r.row; meta.version=r.version; return r.row; }
+  catch(e){ toast(e.message,true); await refresh(true); drawSheet(); }
+}
+$('content').addEventListener('input',e=>{ if(page!=='sheet'||e.target.dataset.f!=='amount') return; const {row}=rowCtx(e.target); if(row){ row.amount=parseAmt(e.target.value); updateSheetTotals(); } });
+$('content').addEventListener('change',async e=>{
+  if(page!=='sheet') return; const f=e.target.dataset.f; if(!f) return;
+  const {sec,id}=rowCtx(e.target); if(!id) return;
+  let v=e.target.value; if(f==='amount'){ v=parseAmt(v); e.target.value=v?fmt(v):''; }
+  const row=await patchRow(sec,id,{[f]:v});
+  if(row){ const w=e.target.closest('tr')?.querySelector('.who'); if(w) w.innerHTML=`${esc(nameOf(row.updatedBy))}<br>${dt(row.updatedAt)}`; }
+  updateSheetTotals();
+});
+$('content').addEventListener('click',async e=>{
+  if(page!=='sheet') return; const a=e.target.dataset.a; if(!a) return;
+  const {sec,id,row}=rowCtx(e.target);
+  if(a==='add'){ try{ const r=await api('/api/rows',{method:'POST',body:{section:sec,name:'',amount:0}}); state[sec].push(r.row); meta.version=r.version; sheetFilter.q=''; $('sQ').value=''; drawSheet();
+      const ins=document.querySelectorAll(`.sec[data-sec="${sec}"] ${sec==='banks'?'input[data-f=bank]':'input.name'}`); ins[ins.length-1]?.focus(); }catch(err){ toast(err.message,true); } }
+  if(a==='flag'){ await patchRow(sec,id,{flag:!row.flag}); drawSheet(); }
+  if(a==='del'){ if(!confirm(`Delete "${rowLabel(row)||'this row'}" (${fmt(row.amount)||0})? This is recorded in the activity log.`)) return;
+    try{ const r=await api(`/api/rows/${sec}/${id}`,{method:'DELETE'}); state[sec]=state[sec].filter(x=>x.id!==id); meta.version=r.version; drawSheet(); updateSheetTotals(); toast('Row deleted'); }catch(err){ toast(err.message,true); } }
+  if(a==='hist') showHistory(id,rowLabel(row));
+});
+async function showHistory(id,name){
+  const list=await api('/api/audit?rowId='+id).catch(()=>[]);
+  openDlg(`History: ${name||'(no name)'}`, list.length?`<div class="scroll"><table class="t"><thead><tr><th>When</th><th>Who</th><th>From where</th><th>What</th><th class="r">Before</th><th class="r">After</th></tr></thead><tbody>
+    ${list.map(l=>`<tr><td>${dt(l.at)}</td><td>${esc(l.userName)}</td><td>${esc(l.ip)}<div class="note">${esc(l.device)}</div></td><td>${esc(l.action)} ${esc(FIELD_NAME[l.field]||l.field||'')}</td><td class="r from">${showVal(l.field,l.from)}</td><td class="r">${showVal(l.field,l.to)}</td></tr>`).join('')}
+    </tbody></table></div>`:'<div class="empty">No manual changes recorded for this row. API balance changes are listed under each API refresh in the activity log.</div>');
+}
+const showVal=(f,v)=> v===null||v===undefined ? '' : (f==='amount'||f==='difference') ? fmt(v) : typeof v==='boolean' ? (v?'Yes':'No') : esc(v);
+function exportSheet(st,date){
+  const rows=[], tot={};
+  for(const s of SECTIONS){
+    rows.push([s.title]); rows.push(['Sr.No','Bank','Name','Account number','Amount','Source','Note','Last entry by','Last entry at']); let t=0;
+    (st[s.key]||[]).forEach((r,i)=>{ t+=+r.amount||0; rows.push([i+1,r.bank||'',r.name,r.accountNo?"'"+r.accountNo:'',r.amount||0,r.source==='api'?'API: '+connName(r.connId):r.source,r.note,nameOf(r.updatedBy),r.updatedAt?new Date(r.updatedAt).toLocaleString('en-IN'):'']); });
+    tot[s.key]=t; rows.push(['','',s.title+' total','',t]); rows.push([]);
+  }
+  const g=tot.payout+tot.payin+tot.other;
+  rows.push(['Grand total (Payout + Payin + Other party)','',g],['Bank total','',tot.banks],['Other uses total','',tot.uses],['Difference','',g-tot.banks-tot.uses]);
+  download(`reconciliation-${date}.csv`,rows);
+}
+
+/* ---------- Clear today's data (admin) ---------- */
+async function clearTodayDialog(){
+  const [closings,todayPnl]=await Promise.all([getClosings(true),api(`/api/pnl?from=${meta.today}&to=${meta.today}`).catch(()=>[])]);
+  const prev=[...closings].filter(c=>c.date<meta.today).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  let prevState=null;
+  const manual=k=>state[k].filter(r=>r.source!=='api');
+  const pnlSum=todayPnl.reduce((a,e)=>a+(e.type==='income'?e.amount:-e.amount),0);
+  openDlg("Clear today's data",`
+    <div class="stack" style="gap:14px">
+      <div><label class="f">How to clear</label>
+        <label style="display:block;margin:4px 0"><input type="radio" name="clMode" value="zero" checked> <b>Set manual amounts to zero</b> <span class="note">Rows, names, banks and account numbers stay. API balances are not touched.</span></label>
+        <label style="display:block;margin:4px 0"><input type="radio" name="clMode" value="restore" ${prev?'':'disabled'}> <b>Go back to the last closing</b> <span class="note">${prev?`Sections are put back exactly as they were at the closing of ${dLabel(prev.date)}.`:'Not available: no earlier closing yet.'}</span></label>
+      </div>
+      <div><label class="f">Sections</label>
+        <div class="grid2" style="gap:6px">${SECTIONS.map(s=>`<label><input type="checkbox" class="clSec" value="${s.key}" ${!s.api?'checked':''}> ${s.title} <span class="note">(${manual(s.key).filter(r=>r.amount).length} manual with amounts)</span></label>`).join('')}</div>
+      </div>
+      <div id="clOpts">
+        <label style="display:block"><input type="checkbox" id="clNotes"> Also clear notes and red flags</label>
+        <label style="display:block"><input type="checkbox" id="clPnl" ${todayPnl.length?'':'disabled'}> Delete today's profit &amp; loss entries <span class="note">(${todayPnl.length} entr${todayPnl.length===1?'y':'ies'}, net ${fmtS(pnlSum)})</span></label>
+      </div>
+      <div class="card" style="background:var(--soft)" id="clPreview"></div>
+      <div><label class="f">Type CLEAR to confirm</label><input class="inp" id="clConfirm" autocomplete="off" style="max-width:200px"></div>
+      <div class="row-gap"><button class="btn primary" id="clGo" disabled style="background:var(--flag);border-color:var(--flag)">Clear today's data</button><span class="note">A backup is saved first, and you can undo from the Sheet page today.</span></div>
+    </div>`);
+  const body=$('dlgBody');
+  const mode=()=>body.querySelector('input[name=clMode]:checked').value;
+  const secs=()=>[...body.querySelectorAll('.clSec:checked')].map(x=>x.value);
+  const preview=async()=>{
+    $('clNotes').closest('label').classList.toggle('hidden',mode()!=='zero');
+    if(mode()==='restore'&&!prevState){ prevState=(await api('/api/closings/'+prev.date)).state; }
+    const sim=JSON.parse(JSON.stringify(state)); let n=0;
+    for(const k of secs()){
+      if(mode()==='zero'){ for(const r of sim[k]) if(r.source!=='api'&&r.amount){ r.amount=0; n++; } }
+      else { n+=sim[k].length; sim[k]=prevState[k]||[]; }
+    }
+    const a=totals(), b=totalsOf(sim);
+    $('clPreview').innerHTML=`<div class="grid3" style="gap:10px">
+      <div class="stat"><small>Rows affected</small><b style="font-size:18px">${n}</b></div>
+      <div class="stat"><small>Difference now</small><b style="font-size:18px">${fmt(a.diff)}</b></div>
+      <div class="stat"><small>Difference after</small><b style="font-size:18px">${fmt(b.diff)}</b></div></div>
+      ${secs().filter(k=>SECTIONS.find(s=>s.key===k).api).length&&mode()==='zero'?'<div class="note" style="margin-top:6px">API balances in Payout, Payin and Bank accounts stay as they are. Use Refresh API to update them.</div>':''}`;
+    $('clGo').disabled=$('clConfirm').value.trim().toUpperCase()!=='CLEAR'||(!secs().length&&!$('clPnl').checked);
+  };
+  body.addEventListener('change',preview); $('clConfirm').oninput=preview;
+  $('clGo').onclick=async()=>{
+    try{ const r=await api('/api/clear-today',{method:'POST',body:{mode:mode(),sections:secs(),notes:$('clNotes').checked,pnl:$('clPnl').checked,confirm:$('clConfirm').value.trim().toUpperCase()}});
+      dlg.close(); toast(`Cleared. ${r.rowsChanged} row(s) changed${r.pnlRemoved?`, ${r.pnlRemoved} P&L entr${r.pnlRemoved===1?'y':'ies'} deleted`:''}.`); await refresh(true); page_sheet($('content')); }
+    catch(e){ toast(e.message,true); } };
+  preview();
+}
+
+/* ================= Recon data ================= */
+let reconSel={a:'live',b:null,changedOnly:true};
+async function snapshotFor(key){
+  if(key==='live') return {label:'Today (live)', state, totals:totals()};
+  const c=await api('/api/closings/'+key); return {label:'Closing '+dLabel(key), state:c.state, totals:c.totals};
+}
+async function page_recon(el){
+  const closings=await getClosings(true);
+  const dates=closings.map(c=>c.date);
+  if(!reconSel.b || !dates.includes(reconSel.b)) reconSel.b=dates.find(d=>d<meta.today)||dates[0]||null;
+  if(reconSel.a!=='live' && !dates.includes(reconSel.a)) reconSel.a='live';
+  const opts=sel=>`<option value="live" ${sel==='live'?'selected':''}>Today (live)</option>`+dates.map(d=>`<option value="${d}" ${sel===d?'selected':''}>Closing ${dLabel(d)}</option>`).join('');
+  el.innerHTML=`<div class="filters no-print">
+      <label>Compare<select class="inp" id="rA">${opts(reconSel.a)}</select></label>
+      <label>With<select class="inp" id="rB">${dates.length?opts(reconSel.b):'<option>No closings yet</option>'}</select></label>
+      <label style="flex-direction:row;align-items:center;gap:6px;font-weight:500;padding-bottom:7px"><input type="checkbox" id="rChg" ${reconSel.changedOnly?'checked':''}> Only rows that changed</label>
+      <span style="margin-left:auto"></span><button class="btn" id="rCsv">Export to Excel (CSV)</button><button class="btn" onclick="print()">Print</button>
+    </div><div id="rBody"></div>`;
+  if(!dates.length){ $('rBody').innerHTML='<div class="card empty">Recon compares two points in time. Close at least one day to compare it with today.</div>'; return; }
+  const draw=async()=>{
+    $('rBody').innerHTML='<div class="empty">Loading…</div>';
+    const [A,B]=await Promise.all([snapshotFor(reconSel.a),snapshotFor(reconSel.b)]).catch(e=>{toast(e.message,true);return [];});
+    if(!A||page!=='recon') return;
+    const ta=A.totals, tb=B.totals;
+    const steps=[['Payout wallets',ta.payout-tb.payout],['Payin wallets',ta.payin-tb.payin],['Other party',ta.other-tb.other],['Bank accounts',-(ta.banks-tb.banks)],['Other uses',-(ta.uses-tb.uses)]];
+    const vals=[tb.diff]; let run=tb.diff; for(const [,d] of steps){ run+=d; vals.push(run); }
+    const lo=Math.min(0,...vals), hi=Math.max(0,...vals), span=(hi-lo)||1, X=v=>(v-lo)/span*100;
+    let cur=tb.diff;
+    const walk=[`<div>Difference at ${esc(B.label)}</div><div class="w-track"><div class="w-bar total" style="left:${Math.min(X(0),X(tb.diff))}%;width:${Math.abs(X(tb.diff)-X(0))}%"></div></div><div class="r"><b>${fmt(tb.diff)}</b></div>`];
+    for(const [k,d] of steps){ const s=cur; cur+=d;
+      walk.push(`<div>${k} ${d===0?'':d>0?'<span class="note">raised it</span>':'<span class="note">lowered it</span>'}</div><div class="w-track">${d?`<div class="w-bar ${d>0?'up':'down'}" style="left:${Math.min(X(s),X(cur))}%;width:${Math.max(.4,Math.abs(X(cur)-X(s)))}%"></div>`:''}</div><div class="r ${d>0?'loss':d<0?'gain':''}">${d?fmtS(d):'–'}</div>`); }
+    walk.push(`<div><b>Difference at ${esc(A.label)}</b></div><div class="w-track"><div class="w-bar total" style="left:${Math.min(X(0),X(ta.diff))}%;width:${Math.abs(X(ta.diff)-X(0))}%"></div></div><div class="r"><b>${fmt(ta.diff)}</b></div>`);
+
+    const secHTML=SECTIONS.map(s=>{
+      const a=A.state[s.key]||[], b=B.state[s.key]||[], bm=new Map(b.map(r=>[r.id,r])), am=new Map(a.map(r=>[r.id,r]));
+      let rows=[...a.map(r=>({name:rowLabel(r),open:bm.get(r.id)?.amount??null,close:r.amount??0,flag:r.flag})),...b.filter(r=>!am.has(r.id)).map(r=>({name:rowLabel(r),open:r.amount??0,close:null}))];
+      rows.forEach(r=>r.mv=(r.close||0)-(r.open||0));
+      const ot=rows.reduce((x,r)=>x+(r.open||0),0), ct=rows.reduce((x,r)=>x+(r.close||0),0);
+      if(reconSel.changedOnly) rows=rows.filter(r=>r.mv!==0||r.open===null||r.close===null);
+      rows.sort((x,y)=>Math.abs(y.mv)-Math.abs(x.mv));
+      return `<div class="card"><div class="card-head"><h3>${s.title}</h3><span class="right ${ct-ot?'':'muted'}"><b>${ct-ot?fmtS(ct-ot):'No change'}</b></span></div>
+        <div class="scroll"><table class="t"><thead><tr><th>Name</th><th class="r">${esc(B.label.replace('Closing ',''))}</th><th class="r">${esc(A.label.replace('Closing ',''))}</th><th class="r">Movement</th><th class="r">%</th></tr></thead><tbody>
+        ${rows.map(r=>`<tr class="${r.flag?'flagged':''}"><td>${esc(r.name)}${r.open===null?' <span class="badge b-api">New</span>':r.close===null?' <span class="badge b-warn">Removed</span>':''}</td>
+          <td class="r">${r.open===null?'–':fmt(r.open)}</td><td class="r">${r.close===null?'–':fmt(r.close)}</td><td class="r"><b>${r.mv?fmtS(r.mv):'–'}</b></td>
+          <td class="r note">${r.open?((r.mv/r.open)*100).toFixed(1)+'%':''}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No changes</td></tr>'}
+        </tbody><tfoot><tr><td>Total</td><td class="r">${fmt(ot)}</td><td class="r">${fmt(ct)}</td><td class="r">${fmtS(ct-ot)}</td><td></td></tr></tfoot></table></div></div>`;
+    }).join('');
+    $('rBody').innerHTML=`<div class="card" style="margin-bottom:18px"><div class="card-head"><h3>How the difference moved</h3><span class="right note">Red raised the difference (worse), green lowered it (better)</span></div><div class="walk">${walk.join('')}</div></div>
+      <div class="grid2">${secHTML}</div>`;
+    $('rCsv').onclick=()=>{
+      const out=[[`Recon: ${A.label} vs ${B.label}`],[],['Section','Name',B.label,A.label,'Movement']];
+      for(const s of SECTIONS){ const a=A.state[s.key]||[], bm=new Map((B.state[s.key]||[]).map(r=>[r.id,r])), am=new Set(a.map(r=>r.id));
+        for(const r of a) out.push([s.title,rowLabel(r),bm.get(r.id)?.amount??'',r.amount??0,(r.amount||0)-(bm.get(r.id)?.amount||0)]);
+        for(const r of (B.state[s.key]||[]).filter(r=>!am.has(r.id))) out.push([s.title,rowLabel(r)+' (removed)',r.amount,'',-(r.amount||0)]); }
+      out.push([],['Difference','',tb.diff,ta.diff,ta.diff-tb.diff]);
+      download(`recon-${reconSel.a}-vs-${reconSel.b}.csv`,out);
+    };
+  };
+  $('rA').onchange=e=>{reconSel.a=e.target.value; draw();};
+  $('rB').onchange=e=>{reconSel.b=e.target.value; draw();};
+  $('rChg').onchange=e=>{reconSel.changedOnly=e.target.checked; draw();};
+  draw();
+}
+
+/* ================= Profit & loss entries ================= */
+let pnlF={from:null,to:null,type:'',cat:''};
+async function page_pnl(el){
+  if(!pnlF.from){ pnlF.from=meta.today.slice(0,8)+'01'; pnlF.to=meta.today; }
+  const S=meta.settings;
+  el.innerHTML=`<div class="card no-print" style="margin-bottom:18px"><h3>Add income or expense</h3>
+      <form id="pForm" class="form-grid">
+        <div><label class="f">Date</label><input class="inp" type="date" id="pDate" value="${meta.today}" max="${meta.today}"></div>
+        <div><label class="f">Type</label><div class="seg" id="pType"><button type="button" data-t="income" aria-pressed="true">Income</button><button type="button" data-t="expense" aria-pressed="false">Expense</button></div></div>
+        <div><label class="f">Category</label><select class="inp" id="pCat"></select></div>
+        <div><label class="f">Party / account</label><input class="inp" id="pParty" placeholder="e.g. Mercalix"></div>
+        <div><label class="f">Amount</label><input class="inp" id="pAmt" inputmode="decimal" required></div>
+        <div><label class="f">Note</label><input class="inp" id="pNote"></div>
+        <div><button class="btn primary">Add entry</button></div>
+      </form></div>
+    <div class="grid3" id="pStats" style="margin-bottom:18px"></div>
+    <div class="filters no-print">
+      <label>From<input class="inp" type="date" id="fFrom" value="${pnlF.from}"></label>
+      <label>To<input class="inp" type="date" id="fTo" value="${pnlF.to}"></label>
+      <label>Type<select class="inp" id="fType"><option value="">All</option><option value="income">Income</option><option value="expense">Expense</option></select></label>
+      <label>Category<select class="inp" id="fCat"><option value="">All</option>${[...S.incomeCategories,...S.expenseCategories].map(c=>`<option>${esc(c)}</option>`).join('')}</select></label>
+      <span style="margin-left:auto"></span><button class="btn" id="pCsv">Export to Excel (CSV)</button>
+    </div>
+    <div class="card" style="padding:0"><div class="scroll"><table class="t"><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Party</th><th>Note</th><th class="r">Amount</th><th>Entered by</th><th></th></tr></thead><tbody id="pBody"></tbody></table></div></div>`;
+  let type='income';
+  const setCats=()=>{ $('pCat').innerHTML=(type==='income'?S.incomeCategories:S.expenseCategories).map(c=>`<option>${esc(c)}</option>`).join(''); };
+  $('pType').querySelectorAll('button').forEach(b=>b.onclick=()=>{ type=b.dataset.t; $('pType').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); setCats(); });
+  setCats(); $('fType').value=pnlF.type; $('fCat').value=pnlF.cat;
+  $('pForm').onsubmit=async e=>{ e.preventDefault();
+    try{ await api('/api/pnl',{method:'POST',body:{date:$('pDate').value,type,category:$('pCat').value,party:$('pParty').value,amount:parseAmt($('pAmt').value),note:$('pNote').value}});
+      $('pAmt').value=''; $('pNote').value=''; $('pParty').value=''; toast('Entry added'); load(); refresh(true); }catch(err){ toast(err.message,true); } };
+  for(const [id,k] of [['fFrom','from'],['fTo','to'],['fType','type'],['fCat','cat']]) $(id).onchange=e=>{ pnlF[k]=e.target.value; load(); };
+  let rows=[];
+  async function load(){
+    rows=(await api(`/api/pnl?from=${pnlF.from}&to=${pnlF.to}`).catch(()=>[])).filter(e=>(!pnlF.type||e.type===pnlF.type)&&(!pnlF.cat||e.category===pnlF.cat));
+    const inc=rows.filter(e=>e.type==='income').reduce((a,e)=>a+e.amount,0), exp=rows.filter(e=>e.type==='expense').reduce((a,e)=>a+e.amount,0);
+    $('pStats').innerHTML=`<div class="card stat"><small>Income</small><b class="gain">${fmt(inc)}</b></div><div class="card stat"><small>Expenses</small><b class="loss">${fmt(exp)}</b></div>
+      <div class="card stat"><small>${inc-exp>=0?'Net profit':'Net loss'}</small><b class="${inc-exp>=0?'gain':'loss'}">${fmtS(inc-exp)}</b><div class="sub">${dShort(pnlF.from)} to ${dShort(pnlF.to)}</div></div>`;
+    $('pBody').innerHTML=rows.map(e=>`<tr data-id="${e.id}"><td>${dShort(e.date)}</td><td><span class="badge ${e.type==='income'?'b-in':'b-out'}">${e.type==='income'?'Income':'Expense'}</span></td>
+      <td>${esc(e.category)}</td><td>${esc(e.party)}</td><td class="note">${esc(e.note)}</td><td class="r"><b class="${e.type==='income'?'gain':'loss'}">${fmt(e.amount)}</b></td>
+      <td class="note">${esc(e.createdByName)}<br>${dt(e.createdAt)}</td>
+      <td class="r" style="white-space:nowrap"><button class="ico" data-pa="edit" title="Edit">✎</button><button class="ico" data-pa="hist" title="History">🕘</button>${isAdmin()?'<button class="ico" data-pa="del" title="Delete">✕</button>':''}</td></tr>`).join('')
+      ||'<tr><td colspan="8" class="empty">No entries in this period.</td></tr>';
+    $('pBody').querySelectorAll('[data-pa]').forEach(b=>b.onclick=()=>{ const e=rows.find(x=>x.id===b.closest('tr').dataset.id); pnlAction(b.dataset.pa,e,load); });
+    $('pCsv').onclick=()=>download(`pnl-${pnlF.from}-to-${pnlF.to}.csv`,[['Date','Type','Category','Party','Note','Amount','Entered by','Entered at'],
+      ...rows.map(e=>[e.date,e.type,e.category,e.party,e.note,e.type==='income'?e.amount:-e.amount,e.createdByName,new Date(e.createdAt).toLocaleString('en-IN')]),[],['','','','','Income',inc],['','','','','Expenses',-exp],['','','','','Net',inc-exp]]);
+  }
+  load();
+}
+async function pnlAction(a,e,reload){
+  if(a==='hist') return showHistory(e.id,`${e.category} ${fmt(e.amount)}`);
+  if(a==='del'){ if(!confirm(`Delete this ${e.type} of ${fmt(e.amount)}?`)) return; try{ await api('/api/pnl/'+e.id,{method:'DELETE'}); toast('Entry deleted'); reload(); refresh(true); }catch(err){ toast(err.message,true); } return; }
+  const S=meta.settings, cats=t=>(t==='income'?S.incomeCategories:S.expenseCategories);
+  const b=openDlg('Edit entry',`<form id="eForm" class="form-grid">
+    <div><label class="f">Date</label><input class="inp" type="date" id="eDate" value="${e.date}"></div>
+    <div><label class="f">Type</label><select class="inp" id="eType"><option value="income">Income</option><option value="expense">Expense</option></select></div>
+    <div><label class="f">Category</label><select class="inp" id="eCat"></select></div>
+    <div><label class="f">Party</label><input class="inp" id="eParty" value="${esc(e.party)}"></div>
+    <div><label class="f">Amount</label><input class="inp" id="eAmt" value="${fmt(e.amount)}"></div>
+    <div><label class="f">Note</label><input class="inp" id="eNote" value="${esc(e.note)}"></div>
+    <div><button class="btn primary">Save changes</button></div></form>`);
+  const fill=()=>{ const list=cats($('eType').value); $('eCat').innerHTML=[...new Set([...list,e.category])].map(c=>`<option ${c===e.category?'selected':''}>${esc(c)}</option>`).join(''); };
+  $('eType').value=e.type; fill(); $('eType').onchange=fill;
+  $('eForm').onsubmit=async ev=>{ ev.preventDefault();
+    try{ await api('/api/pnl/'+e.id,{method:'PATCH',body:{date:$('eDate').value,type:$('eType').value,category:$('eCat').value,party:$('eParty').value,amount:parseAmt($('eAmt').value),note:$('eNote').value}}); dlg.close(); toast('Entry saved'); reload(); refresh(true); }
+    catch(err){ toast(err.message,true); } };
+}
+
+/* ================= Reports ================= */
+let repP='month', repFrom=null, repTo=null;
+function periodRange(p){
+  const t=meta.today, y=t.slice(0,4), m=t.slice(0,7);
+  if(p==='today') return [t,t];
+  if(p==='7d') return [addDays(t,-6),t];
+  if(p==='month') return [m+'-01',t];
+  if(p==='lastmonth'){ const first=addDays(m+'-01',-1).slice(0,7)+'-01'; return [first,addDays(m+'-01',-1)]; }
+  if(p==='year') return [y+'-01-01',t];
+  return [repFrom||m+'-01',repTo||t];
+}
+async function page_reports(el){
+  el.innerHTML=`<div class="filters no-print">
+      <div class="seg" id="repSeg">${[['today','Today'],['7d','Last 7 days'],['month','This month'],['lastmonth','Last month'],['year','This year'],['custom','Custom']].map(([k,l])=>`<button data-p="${k}" aria-pressed="${repP===k}">${l}</button>`).join('')}</div>
+      <label class="${repP==='custom'?'':'hidden'}" id="rcF">From<input class="inp" type="date" id="repFrom"></label>
+      <label class="${repP==='custom'?'':'hidden'}" id="rcT">To<input class="inp" type="date" id="repTo"></label>
+      <span style="margin-left:auto"></span><button class="btn" id="repCsv">Export to Excel (CSV)</button><button class="btn" onclick="print()">Print</button>
+    </div><div id="repBody"><div class="empty">Loading…</div></div>`;
+  $('repSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{ repP=b.dataset.p; page_reports(el); });
+  const [from,to]=periodRange(repP); $('repFrom').value=from; $('repTo').value=to;
+  $('repFrom').onchange=e=>{repFrom=e.target.value; page_reports(el);}; $('repTo').onchange=e=>{repTo=e.target.value; page_reports(el);};
+  const [entries,closings]=await Promise.all([api(`/api/pnl?from=${from}&to=${to}`).catch(()=>[]),getClosings(true)]);
+  if(page!=='reports') return;
+  const inc=entries.filter(e=>e.type==='income'), exp=entries.filter(e=>e.type==='expense');
+  const I=inc.reduce((a,e)=>a+e.amount,0), E=exp.reduce((a,e)=>a+e.amount,0), N=I-E;
+  const sorted=[...closings].sort((a,b)=>a.date.localeCompare(b.date));
+  const start=sorted.filter(c=>c.date<from).pop()||sorted.find(c=>c.date>=from&&c.date<=to);
+  let end=sorted.filter(c=>c.date<=to).pop(); let endLabel=end?dShort(end.date):'';
+  const live=to>=meta.today && !meta.locked;
+  const endDiff=live?totals().diff:end?.totals.diff, startDiff=start?.totals.diff;
+  if(live) endLabel='today (live)';
+  const posChange=(startDiff!=null&&endDiff!=null)?startDiff-endDiff:null;
+  const days=daysBetween(from,to), byDay={};
+  for(const e of entries){ byDay[e.date]??={i:0,e:0}; byDay[e.date][e.type==='income'?'i':'e']+=e.amount; }
+  const cByDate=Object.fromEntries(sorted.map(c=>[c.date,c]));
+  const group=list=>{ const g={}; for(const e of list) g[e.category]=(g[e.category]||0)+e.amount; return Object.entries(g).sort((a,b)=>b[1]-a[1]); };
+  const gi=group(inc), ge=group(exp);
+  const parties={}; for(const e of entries) if(e.party){ parties[e.party]??={i:0,e:0}; parties[e.party][e.type==='income'?'i':'e']+=e.amount; }
+  const partyRows=Object.entries(parties).map(([k,v])=>({k,...v,n:v.i-v.e})).sort((a,b)=>Math.abs(b.n)-Math.abs(a.n)).slice(0,10);
+  const catTable=(rows,total,cls)=>rows.length?`<table class="t"><tbody>${rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="r ${cls}">${fmt(v)}</td><td class="r note">${total?(v/total*100).toFixed(1)+'%':''}</td></tr>`).join('')}</tbody><tfoot><tr><td>Total</td><td class="r">${fmt(total)}</td><td></td></tr></tfoot></table>`:'<div class="empty">None in this period.</div>';
+
+  // top movers between start and end closings
+  let movers='<div class="empty">Needs a closing at the start and end of the period.</div>';
+  if(start && (end||live) && (live || end.date!==start.date)){
+    const [A,B]=await Promise.all([live?{state}:api('/api/closings/'+end.date),api('/api/closings/'+start.date)]).catch(()=>[]);
+    if(A&&B){ const list=[]; for(const s of SECTIONS){ const bm=new Map((B.state[s.key]||[]).map(r=>[r.id,r.amount||0])); for(const r of A.state[s.key]||[]){ const d=(r.amount||0)-(bm.get(r.id)||0); if(d) list.push({s:s.title,n:rowLabel(r),d}); } }
+      list.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d));
+      movers=list.length?`<table class="t"><thead><tr><th>Name</th><th>Section</th><th class="r">Change</th></tr></thead><tbody>${list.slice(0,12).map(m=>`<tr><td>${esc(m.n)}</td><td class="note">${m.s}</td><td class="r"><b>${fmtS(m.d)}</b></td></tr>`).join('')}</tbody></table>`:'<div class="empty">No changes.</div>'; }
+  }
+  if(page!=='reports') return;
+  $('repBody').innerHTML=`
+    <div class="grid4">
+      <div class="card stat"><small>Income</small><b class="gain">${fmt(I)}</b><div class="sub">${inc.length===1?'1 entry':inc.length+' entries'}</div></div>
+      <div class="card stat"><small>Expenses</small><b class="loss">${fmt(E)}</b><div class="sub">${exp.length===1?'1 entry':exp.length+' entries'}</div></div>
+      <div class="card stat"><small>${N>=0?'Net profit':'Net loss'}</small><b class="${N>=0?'gain':'loss'}">${fmtS(N)}</b><div class="sub">${I?`Margin ${(N/I*100).toFixed(1)}% of income`:'Income − expenses'}</div></div>
+      <div class="card stat"><small>Funds position change</small><b class="${posChange==null?'':posChange>=0?'gain':'loss'}">${posChange==null?'–':fmtS(posChange)}</b><div class="sub">${posChange==null?'Needs day-end closings':`Difference ${fmt(startDiff)} on ${dShort(start.date)} → ${fmt(endDiff)} ${endLabel}`}</div></div>
+    </div>
+    <p class="note" style="margin:10px 2px 18px">Net profit comes from the income and expense entries. Funds position change shows how much the gap between money held and money owed improved (positive) or worsened (negative) over the period.</p>
+    <div class="grid2">
+      <div class="card"><h3>Daily profit and loss</h3>${barChart(days.map(d=>({label:dLabel(d),short:dShort(d),y:(byDay[d]?.i||0)-(byDay[d]?.e||0)})))}</div>
+      <div class="card"><h3>Difference at each closing</h3>${lineChart(sorted.filter(c=>c.date>=from&&c.date<=to).map(c=>({label:dLabel(c.date),short:dShort(c.date),y:c.totals.diff})))}</div>
+      <div class="card"><h3>Income by category</h3>${catTable(gi,I,'gain')}</div>
+      <div class="card"><h3>Expenses by category</h3>${catTable(ge,E,'loss')}</div>
+      <div class="card"><h3>By party</h3>${partyRows.length?`<table class="t"><thead><tr><th>Party</th><th class="r">Income</th><th class="r">Expenses</th><th class="r">Net</th></tr></thead><tbody>${partyRows.map(p=>`<tr><td>${esc(p.k)}</td><td class="r">${fmt(p.i)}</td><td class="r">${fmt(p.e)}</td><td class="r ${p.n>=0?'gain':'loss'}"><b>${fmtS(p.n)}</b></td></tr>`).join('')}</tbody></table>`:'<div class="empty">Add a party name to entries to see this.</div>'}</div>
+      <div class="card"><h3>Biggest balance movements</h3>${movers}</div>
+    </div>
+    <div class="card" style="margin-top:18px;padding:0"><div style="padding:14px 16px 0"><h3>Daily statement</h3></div><div class="scroll"><table class="t"><thead><tr><th>Date</th><th class="r">Income</th><th class="r">Expenses</th><th class="r">Net</th><th class="r">Closing difference</th><th class="r">Difference change</th><th>Closed by</th></tr></thead><tbody>
+      ${days.slice().reverse().map(d=>{ const c=cByDate[d], v=byDay[d]||{i:0,e:0}; if(!c&&!v.i&&!v.e) return '';
+        const ch=c&&c.prevDiff!=null?c.totals.diff-c.prevDiff:null;
+        return `<tr><td>${dLabel(d)}</td><td class="r">${v.i?fmt(v.i):'–'}</td><td class="r">${v.e?fmt(v.e):'–'}</td><td class="r ${v.i-v.e>=0?'gain':'loss'}"><b>${v.i||v.e?fmtS(v.i-v.e):'–'}</b></td>
+          <td class="r">${c?fmt(c.totals.diff):'<span class="note">Not closed</span>'}</td><td class="r ${ch>0?'loss':ch<0?'gain':''}">${ch==null?'–':fmtS(ch)}</td><td class="note">${c?esc(c.closedByName):''}</td></tr>`; }).join('')||'<tr><td colspan="7" class="empty">Nothing in this period.</td></tr>'}
+    </tbody><tfoot><tr><td>Total</td><td class="r">${fmt(I)}</td><td class="r">${fmt(E)}</td><td class="r">${fmtS(N)}</td><td></td><td></td><td></td></tr></tfoot></table></div></div>`;
+  $('repCsv').onclick=()=>{
+    const out=[[`Profit & loss report ${from} to ${to}`],[],['Income',I],['Expenses',E],['Net',N],['Funds position change',posChange??''],[],['Income by category'],...gi,[],['Expenses by category'],...ge,[],['Daily statement'],['Date','Income','Expenses','Net','Closing difference']];
+    for(const d of days){ const c=cByDate[d], v=byDay[d]||{i:0,e:0}; if(c||v.i||v.e) out.push([d,v.i,v.e,v.i-v.e,c?c.totals.diff:'']); }
+    download(`report-${from}-to-${to}.csv`,out);
+  };
+}
+
+/* ================= Day-end closing ================= */
+async function page_closing(el){
+  const t=totals(), pt=meta.pnlToday||{income:0,expense:0,net:0};
+  const kv=(tt,p)=>`<div class="grid4" style="margin:6px 0 14px">${[['Payout',tt.payout],['Payin',tt.payin],['Other party',tt.other],['Grand total',tt.grand],['Bank accounts',tt.banks],['Other uses',tt.uses]].map(([k,v])=>`<div class="card stat" style="padding:10px 12px"><small>${k}</small><b style="font-size:17px">${fmt(v)}</b></div>`).join('')}
+    <div class="card stat" style="padding:10px 12px;background:var(--ink);color:var(--paper);border-color:var(--ink)"><small style="color:inherit;opacity:.75">${diffWord(tt.diff)}</small><b style="font-size:17px">${fmt(Math.abs(tt.diff))}</b></div>
+    ${p?`<div class="card stat" style="padding:10px 12px"><small>Profit / loss</small><b style="font-size:17px" class="${p.net>=0?'gain':'loss'}">${fmtS(p.net)}</b></div>`:''}</div>`;
+  el.innerHTML=`<div class="card" style="margin-bottom:18px">
+      <h3>${meta.locked?`${dLabel(meta.today)} is closed`:`Close ${dLabel(meta.today)}`}</h3>${kv(t,pt)}
+      ${meta.locked?`<div class="note">Closed by ${esc(meta.closing.closedByName)} at ${tm(meta.closing.closedAt)}.</div>`:`<div class="row-gap"><input class="inp" id="cRem" placeholder="Remarks (optional), e.g. HDFC statement pending" style="max-width:520px"><button class="btn primary" id="cBtn">Close today and lock entries</button></div>`}
+    </div>
+    <div class="card" style="padding:0"><div class="scroll"><table class="t"><thead><tr><th>Date</th><th class="r">Payout</th><th class="r">Payin</th><th class="r">Other party</th><th class="r">Banks</th><th class="r">Other uses</th><th class="r">Difference</th><th class="r">Change</th><th class="r">Profit / loss</th><th>Closed by</th><th></th></tr></thead><tbody id="cBody"><tr><td colspan="11" class="empty">Loading…</td></tr></tbody></table></div></div>`;
+  if($('cBtn')) $('cBtn').onclick=async()=>{
+    if(!confirm(`Close ${dLabel(meta.today)} with a difference of ${fmt(t.diff)}?\n\nEntries will be locked for today.`)) return;
+    try{ await api('/api/closings',{method:'POST',body:{remarks:$('cRem').value}}); toast('Day closed'); await refresh(true); page_closing(el); }catch(e){ toast(e.message,true); } };
+  const list=await getClosings(true); if(page!=='closing') return;
+  $('cBody').innerHTML=list.map(c=>{ const ch=c.prevDiff==null?null:c.totals.diff-c.prevDiff, p=c.pnl||{net:0};
+    return `<tr><td><b>${dLabel(c.date)}</b>${c.remarks?`<div class="note">${esc(c.remarks)}</div>`:''}</td><td class="r">${fmt(c.totals.payout)}</td><td class="r">${fmt(c.totals.payin)}</td><td class="r">${fmt(c.totals.other)}</td>
+      <td class="r">${fmt(c.totals.banks)}</td><td class="r">${fmt(c.totals.uses)}</td><td class="r"><b>${fmt(c.totals.diff)}</b></td>
+      <td class="r ${ch>0?'loss':ch<0?'gain':''}">${ch==null?'–':fmtS(ch)}</td><td class="r ${p.net>=0?'gain':'loss'}">${p.net?fmtS(p.net):'–'}</td>
+      <td class="note">${esc(c.closedByName)}<br>${dt(c.closedAt)}, ${c.entries===1?'1 entry':c.entries+' entries'}</td>
+      <td class="r" style="white-space:nowrap"><button class="btn sm" data-v="${c.date}">View</button>${isAdmin()?` <button class="btn sm" data-ro="${c.date}">Reopen</button>`:''}</td></tr>`; }).join('')||'<tr><td colspan="11" class="empty">No days closed yet.</td></tr>';
+  $('cBody').querySelectorAll('[data-v]').forEach(b=>b.onclick=async()=>{
+    const c=await api('/api/closings/'+b.dataset.v).catch(e=>toast(e.message,true)); if(!c) return;
+    openDlg(`Closing for ${dLabel(c.date)}`,`<div class="note">Closed by ${esc(c.closedByName)} at ${dt(c.closedAt)}${c.remarks?'. Remarks: '+esc(c.remarks):''}</div>${kv(c.totals,c.pnl)}
+      <div class="row-gap"><button class="btn" id="vCsv">Export to Excel (CSV)</button><button class="btn" id="vRecon">Compare with today</button></div>
+      ${SECTIONS.map(s=>`<h4 style="margin:16px 0 6px">${s.title}: ${fmt(c.totals[s.key])}</h4><div class="scroll"><table class="t"><tbody>
+        ${(c.state[s.key]||[]).map((r,i)=>`<tr class="${r.flag?'flagged':''}"><td class="note" style="width:30px">${i+1}</td><td class="name">${esc(rowLabel(r))}${r.note?`<div class="note">${esc(r.note)}</div>`:''}</td><td class="r">${fmt(r.amount)||'–'}</td></tr>`).join('')}
+      </tbody></table></div>`).join('')}`);
+    $('vCsv').onclick=()=>exportSheet(c.state,c.date);
+    $('vRecon').onclick=()=>{ dlg.close(); reconSel={a:'live',b:c.date,changedOnly:true}; go('recon'); };
+  });
+  $('cBody').querySelectorAll('[data-ro]').forEach(b=>b.onclick=async()=>{
+    if(!confirm(`Reopen ${dLabel(b.dataset.ro)}? Its closing record will be removed so it can be closed again.`)) return;
+    try{ await api('/api/closings/'+b.dataset.ro,{method:'DELETE'}); toast('Day reopened'); await refresh(true); page_closing(el); }catch(e){ toast(e.message,true); } });
+}
+
+/* ================= Activity log ================= */
+let logF={date:null,user:'',sec:'',q:''};
+async function page_log(el){
+  logF.date??=meta.today;
+  el.innerHTML=`<div class="filters">
+      <label>Date<input type="date" class="inp" id="lDate" value="${logF.date}" max="${meta.today}"></label>
+      <label>Person<select class="inp" id="lUser"><option value="">Everyone</option></select></label>
+      <label>Section<select class="inp" id="lSec"><option value="">All</option>${Object.entries(SEC_NAME).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}<option value="_sys">Logins, API, closings, settings</option></select></label>
+      <label>Search<input class="inp" id="lQ" placeholder="Name, note, IP…" value="${esc(logF.q)}"></label>
+      <span style="margin-left:auto"></span><button class="btn" id="lCsv">Export to Excel (CSV)</button>
+    </div>
+    <div class="card" style="padding:0"><div class="scroll"><table class="t" style="min-width:960px"><thead><tr><th>Time</th><th>Who</th><th>From where</th><th>Action</th><th>Section</th><th>Row</th><th>Field</th><th class="r">Before</th><th class="r">After</th></tr></thead><tbody id="lBody"></tbody></table></div></div>`;
+  $('lSec').value=logF.sec;
+  const rowsAll=await api('/api/audit?date='+logF.date).catch(()=>[]); if(page!=='log') return;
+  const people=[...new Map(rowsAll.map(l=>[l.user,l.userName])).entries()];
+  $('lUser').innerHTML='<option value="">Everyone</option>'+people.map(([u,n])=>`<option value="${esc(u)}">${esc(n)}</option>`).join(''); $('lUser').value=logF.user;
+  const draw=()=>{
+    const q=logF.q.toLowerCase();
+    const rows=rowsAll.filter(l=>(!logF.user||l.user===logF.user)&&(!logF.sec||(logF.sec==='_sys'?!l.section:l.section===logF.sec))&&(!q||JSON.stringify(l).toLowerCase().includes(q)));
+    $('lBody').innerHTML=rows.map((l,i)=>`<tr><td>${tm(l.at)}</td><td>${esc(l.userName)}<div class="note">${esc(l.role)}</div></td><td>${esc(l.ip)}<div class="note">${esc(l.device)}</div></td>
+      <td>${esc(l.action)}${l.details?.length?` <button class="btn sm" data-det="${i}">Details</button>`:''}</td><td>${esc(SEC_NAME[l.section]||'')}</td><td>${esc(l.rowName||'')}</td>
+      <td>${esc(FIELD_NAME[l.field]||l.field||'')}</td><td class="r from">${showVal(l.field,l.from)}</td><td class="r">${showVal(l.field,l.to)}</td></tr>`).join('')||'<tr><td colspan="9" class="empty">Nothing recorded.</td></tr>';
+    $('lBody').querySelectorAll('[data-det]').forEach(b=>b.onclick=()=>{ const l=rows[+b.dataset.det];
+      openDlg(l.action+' details',`<div class="scroll"><table class="t"><thead><tr><th>Section</th><th>Account</th><th>Change</th><th class="r">Before</th><th class="r">After</th></tr></thead><tbody>
+        ${l.details.map(d=>`<tr><td>${esc(SEC_NAME[d.section])}</td><td>${esc(d.rowName)}</td><td class="note">${esc(d.what||'')}</td><td class="r from">${d.from==null?'':fmt(d.from)}</td><td class="r">${d.to==null?'':fmt(d.to)}</td></tr>`).join('')}</tbody></table></div>`); });
+    $('lCsv').onclick=()=>download(`activity-${logF.date}.csv`,[['Time','User','Role','IP','Device','Action','Section','Row','Field','Before','After'],
+      ...rows.map(l=>[new Date(l.at).toLocaleString('en-IN'),l.userName,l.role,l.ip,l.device,l.action,SEC_NAME[l.section]||'',l.rowName||'',FIELD_NAME[l.field]||l.field||'',l.from??'',l.to??''])]);
+  };
+  $('lDate').onchange=e=>{logF.date=e.target.value; page_log(el);};
+  $('lUser').onchange=e=>{logF.user=e.target.value; draw();}; $('lSec').onchange=e=>{logF.sec=e.target.value; draw();}; $('lQ').oninput=e=>{logF.q=e.target.value; draw();};
+  draw();
+}
+
+/* ================= API connections (admin) ================= */
+let connsCache=[];
+async function page_connections(el){
+  el.innerHTML=`<div class="spread" style="margin-bottom:16px"><p class="note" style="margin:0;max-width:720px">Each connection pulls a list of wallets or bank accounts from one API. Choose which accounts go into the sheet; the rest are ignored. Manual entries in the sheet are not affected.</p>
+    <button class="btn primary" id="cAdd">+ Add API connection</button></div><div class="grid2" id="cList"><div class="empty">Loading…</div></div>`;
+  $('cAdd').onclick=()=>editConn(null);
+  connsCache=await api('/api/connections').catch(e=>{toast(e.message,true);return [];}); if(page!=='connections') return;
+  $('cList').innerHTML=connsCache.map(c=>{ const sel=Object.values(c.selected||{}).filter(Boolean).length, fresh=c.known.filter(a=>!(a.key in c.selected)).length;
+    return `<div class="conn" data-id="${c.id}"><div class="spread"><h4>${esc(c.name)}</h4>
+        ${!c.enabled?'<span class="badge b-man">Off</span>':c.lastError?'<span class="badge b-err">Failing</span>':c.lastSync?'<span class="badge b-ok">Working</span>':'<span class="badge b-warn">Not refreshed yet</span>'}</div>
+      <div class="kvline"><span>Goes to <b>${TARGET_NAME[c.target]}</b></span><span>${c.method} ${esc(c.url.replace(/^https?:\/\//,'').slice(0,48))}</span>
+        <span><b>${sel}</b> of ${c.known.length} accounts in sheet${fresh?`, <b class="loss">${fresh} new</b>`:''}</span><span>${c.lastSync?'Refreshed '+dt(c.lastSync):'Never refreshed'}</span></div>
+      ${c.lastError?`<div class="banner warn" style="margin-bottom:10px">${esc(c.lastError)}</div>`:''}
+      <div class="row-gap"><button class="btn sm primary" data-c="pick">Choose accounts</button><button class="btn sm" data-c="sync" ${meta.locked||!c.enabled?'disabled':''}>Refresh now</button>
+        <button class="btn sm" data-c="edit">Edit</button><button class="btn sm danger" data-c="del">Delete</button></div></div>`; }).join('')
+    ||'<div class="card empty" style="grid-column:1/-1">No API connections yet. Add one for your payout wallets and one for each bank API.</div>';
+  $('cList').querySelectorAll('[data-c]').forEach(b=>b.onclick=async()=>{
+    const c=connsCache.find(x=>x.id===b.closest('.conn').dataset.id), a=b.dataset.c;
+    if(a==='edit') editConn(c);
+    if(a==='pick') pickAccounts(c);
+    if(a==='sync'){ b.disabled=true; b.textContent='Refreshing…';
+      try{ const r=await api('/api/sync?id='+c.id,{method:'POST'}); r.errors.length?toast(r.errors[0],true):toast(`${r.changed} change(s)${r.newAccounts?`, ${r.newAccounts} new account(s)`:''}`); }catch(e){ toast(e.message,true); }
+      await refresh(true); page_connections(el); }
+    if(a==='del'){ if(!confirm(`Delete "${c.name}"? Its ${Object.values(c.selected).filter(Boolean).length} account(s) stay in the sheet as manual entries with their last balance.`)) return;
+      try{ const r=await api('/api/connections/'+c.id,{method:'DELETE'}); toast(`Deleted. ${r.keptAsManual} row(s) kept as manual.`); await refresh(true); page_connections(el); }catch(e){ toast(e.message,true); } }
+  });
+}
+
+function editConn(c){
+  const v=c||{name:'',target:'payout',url:'',method:'GET',headers:{Authorization:''},body:null,listPath:'',nameField:'',balanceField:'',idField:'',bankName:'',bankNameField:'',accountNoField:'',enabled:true,autoIncludeNew:false};
+  const hdrRow=(k='',val='')=>`<div class="hdr-row"><input class="inp hk" placeholder="Header name, e.g. Authorization" value="${esc(k)}"><input class="inp hv" placeholder="Value, e.g. Bearer abc123" value="${esc(val)}"><button type="button" class="ico" data-rm aria-label="Remove header">✕</button></div>`;
+  openDlg(c?`Edit ${c.name}`:'Add API connection',`<form id="ceForm">
+    <div class="form-grid">
+      <div><label class="f">Connection name</label><input class="inp" id="ceName" value="${esc(v.name)}" placeholder="e.g. Trexo payout wallets" required></div>
+      <div><label class="f">Balances go to</label><select class="inp" id="ceTarget">${Object.entries(TARGET_NAME).map(([k,n])=>`<option value="${k}" ${v.target===k?'selected':''}>${n}</option>`).join('')}</select></div>
+      <div><label class="f">Method</label><select class="inp" id="ceMethod"><option ${v.method==='GET'?'selected':''}>GET</option><option ${v.method==='POST'?'selected':''}>POST</option></select></div>
+    </div>
+    <div style="margin-top:12px"><label class="f">API URL</label><input class="inp" id="ceUrl" value="${esc(v.url)}" placeholder="https://api.yourprovider.com/v1/wallets" required></div>
+    <div style="margin-top:12px"><label class="f">Headers (API key, token)</label><div id="ceHdrs">${Object.entries(v.headers||{}).map(([k,x])=>hdrRow(k,x)).join('')||hdrRow()}</div><button type="button" class="btn sm" id="ceAddH">+ Add header</button>
+      ${c?'<div class="note" style="margin-top:4px">Saved secrets show as ••••••. Leave them as they are to keep the current value.</div>':''}</div>
+    <div style="margin-top:12px" id="ceBodyWrap" class="${v.method==='POST'?'':'hidden'}"><label class="f">Request body (JSON)</label><textarea class="inp" id="ceBody" placeholder='{"merchantId":"123"}'>${v.body?esc(JSON.stringify(v.body,null,2)):''}</textarea></div>
+    <div class="row-gap" style="margin:16px 0 10px"><button type="button" class="btn primary" id="ceTest">Test connection</button><span class="note">Calls the API once and shows what came back, so you can pick the right fields.</span></div>
+    <div id="ceTestOut"></div>
+    <div class="form-grid" style="margin-top:12px">
+      <div><label class="f">List of accounts is in</label><input class="inp" id="ceList" list="ceListOpts" value="${esc(v.listPath)}" placeholder="e.g. data"><datalist id="ceListOpts"></datalist></div>
+      <div><label class="f">Account name field</label><input class="inp" id="ceNameF" list="ceFieldOpts" value="${esc(v.nameField)}" placeholder="e.g. name" required></div>
+      <div><label class="f">Balance field</label><input class="inp" id="ceBalF" list="ceFieldOpts" value="${esc(v.balanceField)}" placeholder="e.g. balance" required></div>
+      <div><label class="f">Unique ID field (optional)</label><input class="inp" id="ceIdF" list="ceFieldOpts" value="${esc(v.idField)}" placeholder="e.g. accountNo"></div>
+      <datalist id="ceFieldOpts"></datalist>
+    </div>
+    <div class="note" style="margin-top:4px">Use the unique ID field when two accounts can have the same name (for example wallet ID).</div>
+    <div id="ceBankBox" class="card" style="margin-top:12px;background:var(--soft)">
+      <h3 style="margin-bottom:4px">Bank account details</h3>
+      <p class="note" style="margin:0 0 10px">Several accounts can share a name, so each bank account is identified by bank name and account number.</p>
+      <div class="form-grid">
+        <div><label class="f">Account number field</label><input class="inp" id="ceAccF" list="ceFieldOpts" value="${esc(v.accountNoField||'')}" placeholder="e.g. accountNumber"></div>
+        <div><label class="f">Bank name field (if the API sends it)</label><input class="inp" id="ceBankF" list="ceFieldOpts" value="${esc(v.bankNameField||'')}" placeholder="e.g. bankName"></div>
+        <div><label class="f">Or fixed bank name for this API</label><input class="inp" id="ceBankN" value="${esc(v.bankName||'')}" placeholder="e.g. HDFC Bank"></div>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
+      <label><input type="checkbox" id="ceEnabled" ${v.enabled?'checked':''}> Connection is on (included in Refresh API and auto refresh)</label>
+      <label><input type="checkbox" id="ceAuto" ${v.autoIncludeNew?'checked':''}> Add new accounts to the sheet automatically (otherwise they wait for you to tick them)</label>
+    </div>
+    <div class="row-gap" style="margin-top:16px"><button class="btn primary">${c?'Save changes':'Save connection'}</button><span class="note">${c?'':'After saving, refresh it and choose which accounts to include.'}</span></div>
+    <div class="err-text" id="ceErr"></div></form>`);
+  const body=$('dlgBody');
+  body.addEventListener('click',e=>{ if(e.target.matches('[data-rm]')) e.target.closest('.hdr-row').remove(); });
+  $('ceAddH').onclick=()=>$('ceHdrs').insertAdjacentHTML('beforeend',hdrRow());
+  $('ceMethod').onchange=e=>$('ceBodyWrap').classList.toggle('hidden',e.target.value!=='POST');
+  const bankBox=()=>$('ceBankBox').classList.toggle('hidden',$('ceTarget').value!=='banks'); $('ceTarget').onchange=bankBox; bankBox();
+  const collect=()=>({ id:c?.id, name:$('ceName').value, target:$('ceTarget').value, url:$('ceUrl').value.trim(), method:$('ceMethod').value,
+    headers:Object.fromEntries([...body.querySelectorAll('.hdr-row')].map(r=>[r.querySelector('.hk').value.trim(),r.querySelector('.hv').value]).filter(([k])=>k)),
+    body:$('ceBody').value, listPath:$('ceList').value.trim(), nameField:$('ceNameF').value.trim(), balanceField:$('ceBalF').value.trim(), idField:$('ceIdF').value.trim(),
+    accountNoField:$('ceAccF').value.trim(), bankNameField:$('ceBankF').value.trim(), bankName:$('ceBankN').value.trim(),
+    enabled:$('ceEnabled').checked, autoIncludeNew:$('ceAuto').checked });
+  const test=async(again=true)=>{
+    $('ceTestOut').innerHTML='<div class="note">Calling the API…</div>';
+    try{ const r=await api('/api/connections/test',{method:'POST',body:collect()});
+      $('ceListOpts').innerHTML=r.arrays.map(a=>`<option value="${esc(a)}">`).join('');
+      $('ceFieldOpts').innerHTML=r.fields.map(f=>`<option value="${esc(f)}">`).join('');
+      if(!$('ceList').value && r.arrays.length===1 && r.arrays[0]) $('ceList').value=r.arrays[0];
+      const guess=(re)=>r.fields.find(f=>re.test(f));
+      let changed=false; const fill=(id,g)=>{ if(!$(id).value && g){ $(id).value=g; changed=true; } };
+      fill('ceNameF', guess(/acc\w*_?name|holder|(^|\.)name$/i)||r.fields.find(f=>/name/i.test(f)&&!/bank/i.test(f)));
+      fill('ceBalF', guess(/bal|amount|avail/i));
+      if($('ceTarget').value==='banks'){ fill('ceAccF', guess(/acc\w*(no|num)|account_?n|acno|acct/i)); if(!$('ceBankN').value) fill('ceBankF', guess(/bank/i)); }
+      if(again && changed && $('ceNameF').value && $('ceBalF').value) return test(false);
+      $('ceTestOut').innerHTML=`<div class="banner info">Connected. Lists found: <b>${r.arrays.map(a=>esc(a||'(whole response)')).join(', ')||'none'}</b>. Fields in each item: ${r.fields.map(esc).join(', ')||'none'}</div>
+        ${r.mapError?`<div class="banner warn">${esc(r.mapError)}</div>`:''}
+        ${r.duplicates?`<div class="banner warn">${r.duplicates} account(s) can't be told apart with the current fields. Set the account number field (and bank name) so each account is unique.</div>`:''}
+        ${r.accounts.length?`<div class="note" style="margin-bottom:6px">${r.accounts.length} accounts read with the current fields. First 10:</div><div class="scroll"><table class="t"><thead><tr>${$('ceTarget').value==='banks'?'<th>Bank</th>':''}<th>Name</th>${$('ceTarget').value==='banks'?'<th>Account number</th>':'<th>ID</th>'}<th class="r">Balance</th></tr></thead><tbody>${r.accounts.slice(0,10).map(a=>`<tr>${$('ceTarget').value==='banks'?`<td>${esc(a.bank)}</td>`:''}<td>${esc(a.name)}${a.dup?' <span class="badge b-warn">Duplicate</span>':''}</td><td class="note">${$('ceTarget').value==='banks'?esc(a.accountNo):a.key!==a.name?esc(a.key):''}</td><td class="r">${fmt(a.balance)}</td></tr>`).join('')}</tbody></table></div>`:''}
+        ${r.sample?`<details style="margin-top:8px"><summary class="note">Show first item from the API</summary><pre class="sample">${esc(r.sample)}</pre></details>`:''}
+        ${!r.accounts.length&&!r.mapError&&r.fields.length?'<div class="note">Pick the name and balance fields below, then test again to preview.</div>':''}`;
+    }catch(e){ $('ceTestOut').innerHTML=`<div class="banner warn">${esc(e.message)}</div>`; }
+  };
+  $('ceTest').onclick=()=>test();
+  $('ceForm').onsubmit=async e=>{ e.preventDefault(); $('ceErr').textContent='';
+    try{ const d=collect(); c?await api('/api/connections/'+c.id,{method:'PUT',body:d}):await api('/api/connections',{method:'POST',body:d});
+      dlg.close(); toast(c?'Connection saved':'Connection added. Refresh it, then choose accounts.'); await refresh(true); page_connections($('content')); }
+    catch(err){ $('ceErr').textContent=err.message; } };
+}
+
+function pickAccounts(c){
+  if(!c.known.length){ openDlg(`Choose accounts: ${c.name}`,`<div class="empty">No accounts loaded yet. Click <b>Refresh now</b> on this connection first, then come back here.</div>`); return; }
+  const sel={...c.selected}; let filter='all', q=''; const isBank=c.target==='banks';
+  const present=a=>a.lastSeen===c.lastSync;
+  openDlg(`Choose accounts: ${c.name}`,`<div class="filters">
+      <label>Find<input class="inp" id="paQ" placeholder="${isBank?'Bank, name or account number':'Account name or ID'}"></label>
+      <div class="seg" id="paSeg"><button data-f="all" aria-pressed="true">All</button><button data-f="on" aria-pressed="false">In sheet</button><button data-f="off" aria-pressed="false">Not in sheet</button><button data-f="new" aria-pressed="false">New</button></div>
+      <button class="btn sm" id="paAll">Tick all shown</button><button class="btn sm" id="paNone">Untick all shown</button>
+    </div>
+    ${c.known.some(a=>a.dup)?`<div class="banner warn">Some accounts have the same ${isBank?'bank and name with no account number':'name and no unique ID'}, so they can only be told apart by their order in the API. ${isBank?'Edit this connection and set the account number field.':'Edit this connection and set the unique ID field.'}</div>`:''}
+    ${c.known.some(a=>a.review)?`<div class="banner info">After the field change, ${c.known.filter(a=>a.review).length} account(s) with a shared name could not be matched to what was ticked before. They are marked "Check" below. Tick the right one.</div>`:''}
+    <div class="note" id="paCount" style="margin-bottom:8px"></div>
+    <div class="scroll" style="max-height:48vh"><table class="t"><thead><tr><th style="width:32px"></th>${isBank?'<th>Bank</th>':''}<th>Account name</th><th>${isBank?'Account number':'ID'}</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody id="paBody"></tbody></table></div>
+    <label style="display:block;margin-top:12px"><input type="checkbox" id="paAuto" ${c.autoIncludeNew?'checked':''}> Add new accounts to the sheet automatically in future</label>
+    <div class="row-gap" style="margin-top:12px"><button class="btn primary" id="paSave" ${meta.locked?'disabled':''}>Save selection</button>${meta.locked?'<span class="note">Today is closed. Reopen it to change the sheet.</span>':''}</div>`);
+  const shown=()=>c.known.filter(a=>(!q||[a.name,a.key,a.bank,a.accountNo].join(' ').toLowerCase().includes(q))&&(filter==='all'||(filter==='on'&&sel[a.key])||(filter==='off'&&!sel[a.key])||(filter==='new'&&!(a.key in c.selected))));
+  const draw=()=>{
+    const list=shown();
+    const nameCount={}; for(const a of c.known){ const k=(a.bank||'').toLowerCase()+'|'+a.name.toLowerCase(); nameCount[k]=(nameCount[k]||0)+1; }
+    $('paBody').innerHTML=list.map(a=>`<tr class="pa-row" data-row="${esc(a.key)}" style="cursor:pointer"><td><input type="checkbox" data-k="${esc(a.key)}" ${sel[a.key]?'checked':''} aria-label="Include ${esc(rowLabel(a))}"></td>${isBank?`<td>${esc(a.bank)}</td>`:''}<td>${esc(a.name)}${nameCount[(a.bank||'').toLowerCase()+'|'+a.name.toLowerCase()]>1?`<div class="note">Same name as another account${isBank&&a.accountNo?', check the account number':''}</div>`:''}</td><td>${isBank?(a.accountNo?`<b>${esc(a.accountNo)}</b>`:'<span class="badge b-warn">No account number</span>'):a.key!==a.name?`<span class="note">${esc(a.key)}</span>`:''}</td>
+      <td class="r">${fmt(a.balance)}</td><td>${a.review?'<span class="badge b-warn">Check</span> ':''}${!(a.key in c.selected)?'<span class="badge b-api">New</span> ':''}${present(a)?'':'<span class="badge b-warn" title="Not in the latest API response">Missing</span>'}</td></tr>`).join('')||`<tr><td colspan="${isBank?6:5}" class="empty">No accounts match.</td></tr>`;
+    const n=Object.values(sel).filter(Boolean).length, total=c.known.filter(a=>sel[a.key]).reduce((x,a)=>x+a.balance,0);
+    $('paCount').textContent=`${n} of ${c.known.length} accounts selected, total balance ${fmt(total)}`;
+  };
+  $('paBody').onchange=e=>{ if(e.target.dataset.k!==undefined){ sel[e.target.dataset.k]=e.target.checked; draw(); } };
+  // clicking anywhere on a row toggles that one account only
+  $('paBody').onclick=e=>{ if(e.target.matches('input')) return; const tr=e.target.closest('tr[data-row]'); if(!tr) return; const k=tr.dataset.row; sel[k]=!sel[k]; draw(); };
+  $('paQ').oninput=e=>{ q=e.target.value.toLowerCase(); draw(); };
+  $('paSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{ filter=b.dataset.f; $('paSeg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); draw(); });
+  $('paAll').onclick=()=>{ shown().forEach(a=>sel[a.key]=true); draw(); };
+  $('paNone').onclick=()=>{ shown().forEach(a=>sel[a.key]=false); draw(); };
+  $('paSave').onclick=async()=>{
+    try{ const r=await api(`/api/connections/${c.id}/selection`,{method:'POST',body:{selected:sel,autoIncludeNew:$('paAuto').checked}});
+      dlg.close(); toast(`Selection saved. ${r.changes} change(s) in the sheet.`); await refresh(true); page_connections($('content')); }
+    catch(e){ toast(e.message,true); } };
+  draw();
+}
+
+/* ================= Users (admin) ================= */
+async function page_users(el){
+  el.innerHTML=`<div class="card" style="margin-bottom:18px"><h3>Add a person</h3>
+      <form id="uAdd" class="form-grid" autocomplete="off">
+        <div><label class="f">Name</label><input class="inp" id="nuName" required></div>
+        <div><label class="f">User ID</label><input class="inp" id="nuUser" required></div>
+        <div><label class="f">Password</label><input class="inp" id="nuPass" type="password" autocomplete="new-password" required minlength="6"></div>
+        <div><label class="f">Role</label><select class="inp" id="nuRole"><option value="staff">Staff</option><option value="admin">Admin</option></select></div>
+        <div><button class="btn primary">Add person</button></div>
+      </form>
+      <p class="note" style="margin:10px 0 0">Staff enter and edit sheet data, add income and expenses, refresh API balances, see reports and the activity log, and close the day. Admins can also delete rows and entries, reopen closed days, manage API connections, people and settings.</p></div>
+    <div class="card" style="padding:0"><div class="scroll"><table class="t"><thead><tr><th>Name</th><th>User ID</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr></thead><tbody id="uBody"></tbody></table></div></div>`;
+  $('uAdd').onsubmit=async e=>{ e.preventDefault();
+    try{ await api('/api/users',{method:'POST',body:{name:$('nuName').value,username:$('nuUser').value,password:$('nuPass').value,role:$('nuRole').value}}); e.target.reset(); toast('Person added'); page_users(el); }
+    catch(err){ toast(err.message,true); } };
+  users=await api('/api/users').catch(()=>users);
+  $('uBody').innerHTML=users.map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td><td><span class="badge ${u.role==='admin'?'b-api':'b-man'}">${u.role==='admin'?'Admin':'Staff'}</span></td>
+    <td>${u.active?'<span class="badge b-ok">Active</span>':'<span class="badge b-err">Disabled</span>'}</td><td>${u.lastLogin?dt(u.lastLogin):'Never'}</td>
+    <td class="r" style="white-space:nowrap"><button class="btn sm" data-u="${esc(u.username)}" data-do="pw">Reset password</button>
+      <button class="btn sm" data-u="${esc(u.username)}" data-do="role">Make ${u.role==='admin'?'staff':'admin'}</button>
+      <button class="btn sm ${u.active?'danger':''}" data-u="${esc(u.username)}" data-do="active">${u.active?'Disable':'Enable'}</button></td></tr>`).join('');
+  $('uBody').querySelectorAll('[data-do]').forEach(b=>b.onclick=async()=>{
+    const u=users.find(x=>x.username===b.dataset.u), d=b.dataset.do; let body;
+    if(d==='pw'){ const p=prompt(`New password for ${u.name} (6+ characters)`); if(!p) return; body={password:p}; }
+    if(d==='role') body={role:u.role==='admin'?'staff':'admin'};
+    if(d==='active'){ if(u.active&&!confirm(`Disable ${u.name}? They will be logged out.`)) return; body={active:!u.active}; }
+    try{ await api('/api/users/'+u.username,{method:'PATCH',body}); toast('Saved'); page_users(el); }catch(e){ toast(e.message,true); } });
+}
+
+/* ================= Settings (admin) ================= */
+function page_settings(el){
+  const S=meta.settings;
+  el.innerHTML=`<form id="stForm" class="stack" style="max-width:860px">
+    <div class="card"><h3>General</h3><div class="form-grid">
+      <div><label class="f">Company name</label><input class="inp" id="stName" value="${esc(S.companyName)}"></div>
+      <div><label class="f">Business timezone</label><select class="inp" id="stTz">${['Asia/Kolkata','Asia/Dubai','Asia/Singapore','Europe/London','UTC'].map(z=>`<option ${S.timezone===z?'selected':''}>${z}</option>`).join('')}</select></div>
+    </div><p class="note" style="margin:8px 0 0">The business day (for closings and the log) follows this timezone.</p></div>
+    <div class="card"><h3>API refresh and alerts</h3><div class="form-grid">
+      <div><label class="f">Refresh API balances automatically</label><select class="inp" id="stAuto">${[[0,'Off'],[5,'Every 5 minutes'],[15,'Every 15 minutes'],[30,'Every 30 minutes'],[60,'Every hour']].map(([v,l])=>`<option value="${v}" ${+S.autoRefreshMinutes===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div><label class="f">Flag a balance movement on the dashboard above</label><input class="inp" id="stTh" value="${fmt(S.alertThreshold)}" inputmode="decimal"></div>
+    </div></div>
+    <div class="card"><h3>Profit and loss categories</h3><div class="grid2">
+      <div><label class="f">Income categories (one per line)</label><textarea class="inp" id="stInc" style="min-height:150px;font-family:var(--font)">${esc(S.incomeCategories.join('\n'))}</textarea></div>
+      <div><label class="f">Expense categories (one per line)</label><textarea class="inp" id="stExp" style="min-height:150px;font-family:var(--font)">${esc(S.expenseCategories.join('\n'))}</textarea></div>
+    </div></div>
+    <div><button class="btn primary">Save settings</button></div></form>`;
+  $('stForm').onsubmit=async e=>{ e.preventDefault();
+    try{ await api('/api/settings',{method:'PUT',body:{companyName:$('stName').value,timezone:$('stTz').value,autoRefreshMinutes:+$('stAuto').value,alertThreshold:parseAmt($('stTh').value),
+      incomeCategories:$('stInc').value.split('\n'),expenseCategories:$('stExp').value.split('\n')}}); toast('Settings saved'); await refresh(true); }
+    catch(err){ toast(err.message,true); } };
+}
+
+boot();
+</script>
+</body>
+</html>
